@@ -1,301 +1,326 @@
-import '../../core/strings.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/palette.dart';
+import '../../core/strings.dart';
+import '../../core/theme.dart';
+import '../../domain/board_meta.dart';
+import '../../domain/board_state.dart';
 import '../../domain/move.dart';
+import 'chunky_button.dart';
 
-/// Professional hint overlay.
-/// - Gently desaturates all other blocks (15% black overlay).
-/// - Highlights the hinted block with a bright glow pulse.
-/// - Shows destination cells with a soft glow fill.
-/// - Draws an animated neon arrow from the block to the destination.
-/// Tap anywhere to dismiss.
-class HintOverlay extends StatefulWidget {
-  final int pieceIndex;
-  final int length;
-  final bool isHoriz;
-  final int fixed;
-  final bool isTarget;
+/// Helper to generate localized move directions for hints.
+String getHintMoveInstruction(BuildContext context, BoardMeta meta, Move move) {
+  final s = S.of(context);
+  final idx = move.pieceIndex;
+  final isHoriz = meta.horiz[idx] == 1;
+  final isTarget = idx == meta.targetIndex;
+  final d = move.delta;
+
+  if (isTarget) {
+    if (d > 0) return s.slideRedRight(d);
+    return s.slideRedLeft(d.abs());
+  } else if (isHoriz) {
+    if (d > 0) return s.slideHorizRight(d);
+    return s.slideHorizLeft(d.abs());
+  } else {
+    if (d > 0) return s.slideVertDown(d);
+    return s.slideVertUp(d.abs());
+  }
+}
+
+/// Visual hint overlay rendered directly on top of the 6x6 board stack.
+/// - Glowing golden/amber neon pulse on the piece to move.
+/// - Ghost destination target box.
+/// - Direction trajectory arrow with pulsing flow.
+/// - Animated gliding hand gesture demonstrating the slide.
+/// - Completely transparent to touch inputs (IgnorePointer) so the player can drag pieces freely!
+class BoardHintOverlay extends StatefulWidget {
+  final BoardMeta meta;
+  final BoardState boardState;
   final Move move;
-  final int currentPos;
   final double cellSize;
-  final double blockPadding;
-  final VoidCallback onDismiss;
 
-  const HintOverlay({
+  const BoardHintOverlay({
     super.key,
-    required this.pieceIndex,
-    required this.length,
-    required this.isHoriz,
-    required this.fixed,
-    required this.isTarget,
+    required this.meta,
+    required this.boardState,
     required this.move,
-    required this.currentPos,
     required this.cellSize,
-    required this.blockPadding,
-    required this.onDismiss,
   });
 
   @override
-  State<HintOverlay> createState() => _HintOverlayState();
+  State<BoardHintOverlay> createState() => _BoardHintOverlayState();
 }
 
-class _HintOverlayState extends State<HintOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _pulseAnim;
-  late final Animation<double> _arrowAnim;
+class _BoardHintOverlayState extends State<BoardHintOverlay>
+    with TickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final AnimationController _slideController;
+  late final Animation<double> _slideAnimation;
+  late final Animation<double> _handOpacityAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+
+    _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
 
-    _pulseAnim = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-    _arrowAnim = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1350),
+    )..repeat();
+
+    _slideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _slideController,
+        curve: const Interval(0.10, 0.90, curve: Curves.easeInOutCubic),
+      ),
+    );
+
+    _handOpacityAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 0.95), weight: 15),
+      TweenSequenceItem(tween: Tween<double>(begin: 0.95, end: 0.95), weight: 65),
+      TweenSequenceItem(tween: Tween<double>(begin: 0.95, end: 0.0), weight: 20),
+    ]).animate(_slideController);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pulseController.dispose();
+    _slideController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onDismiss,
-      behavior: HitTestBehavior.opaque,
-      child: Stack(
-        children: [
-          // Subtle soft dark veil — NOT heavy dimming
-          TweenAnimationBuilder<double>(
-            duration: const Duration(milliseconds: 250),
-            tween: Tween(begin: 0.0, end: 0.30),
-            builder: (context, val, _) {
-              return Container(color: Colors.black.withValues(alpha: val));
-            },
-          ),
-
-          // Main animated hint painter
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              return CustomPaint(
-                painter: _HintPainter(
-                  length: widget.length,
-                  isHoriz: widget.isHoriz,
-                  fixed: widget.fixed,
-                  isTarget: widget.isTarget,
+    return IgnorePointer(
+      ignoring: true, // Never block dragging on the board
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_pulseController, _slideController]),
+        builder: (context, _) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(
+                painter: _BoardHintPainter(
+                  meta: widget.meta,
+                  boardState: widget.boardState,
                   move: widget.move,
-                  currentPos: widget.currentPos,
                   cellSize: widget.cellSize,
-                  blockPadding: widget.blockPadding,
-                  pulseValue: _pulseAnim.value,
-                  arrowValue: _arrowAnim.value,
-                  pieceIndex: widget.pieceIndex,
+                  pulseValue: _pulseController.value,
+                  slideValue: _slideAnimation.value,
                 ),
-                size: Size.infinite,
-              );
-            },
-          ),
+                size: Size(widget.cellSize * 6, widget.cellSize * 6),
+              ),
+              _buildAnimatedHand(),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-          // "Hamle yap" label near the arrow
-          _HintLabel(
-            isHoriz: widget.isHoriz,
-            fixed: widget.fixed,
-            currentPos: widget.currentPos,
-            move: widget.move,
-            length: widget.length,
-            cellSize: widget.cellSize,
+  Widget _buildAnimatedHand() {
+    final idx = widget.move.pieceIndex;
+    final isHoriz = widget.meta.horiz[idx] == 1;
+    final length = widget.meta.len[idx];
+    final fixed = widget.meta.fixed[idx];
+    final currentPos = widget.boardState[idx];
+    final cs = widget.cellSize;
+
+    final double srcCenterX = isHoriz
+        ? (currentPos + length / 2.0) * cs
+        : (fixed + 0.5) * cs;
+    final double srcCenterY = isHoriz
+        ? (fixed + 0.5) * cs
+        : (currentPos + length / 2.0) * cs;
+
+    final double destCenterX = isHoriz
+        ? (currentPos + widget.move.delta + length / 2.0) * cs
+        : (fixed + 0.5) * cs;
+    final double destCenterY = isHoriz
+        ? (fixed + 0.5) * cs
+        : (currentPos + widget.move.delta + length / 2.0) * cs;
+
+    final handX = srcCenterX + (destCenterX - srcCenterX) * _slideAnimation.value;
+    final handY = srcCenterY + (destCenterY - srcCenterY) * _slideAnimation.value;
+
+    return Positioned(
+      left: handX - 14,
+      top: handY - 8,
+      child: Opacity(
+        opacity: _handOpacityAnimation.value,
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Palette.accent.withValues(alpha: 0.40),
+                blurRadius: 18,
+                spreadRadius: 3,
+              ),
+            ],
           ),
-        ],
+          child: const Icon(
+            Icons.touch_app_rounded,
+            size: 38,
+            color: Colors.white,
+            shadows: [
+              Shadow(
+                color: Colors.black45,
+                blurRadius: 10,
+                offset: Offset(1, 3),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-// ─── Painter ─────────────────────────────────────────────────────────────────
-
-class _HintPainter extends CustomPainter {
-  final int length;
-  final bool isHoriz;
-  final int fixed;
-  final bool isTarget;
+class _BoardHintPainter extends CustomPainter {
+  final BoardMeta meta;
+  final BoardState boardState;
   final Move move;
-  final int currentPos;
   final double cellSize;
-  final double blockPadding;
-  final double pulseValue; // 0..1
-  final double arrowValue; // 0..1
-  final int pieceIndex;
+  final double pulseValue;
+  final double slideValue;
 
-  _HintPainter({
-    required this.length,
-    required this.isHoriz,
-    required this.fixed,
-    required this.isTarget,
+  _BoardHintPainter({
+    required this.meta,
+    required this.boardState,
     required this.move,
-    required this.currentPos,
     required this.cellSize,
-    required this.blockPadding,
     required this.pulseValue,
-    required this.arrowValue,
-    required this.pieceIndex,
+    required this.slideValue,
   });
-
-  Color get _blockColor => isTarget
-      ? Palette.targetEnd
-      : Palette.normalBlockGradients[pieceIndex % Palette.normalBlockGradients.length].$1;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final idx = move.pieceIndex;
+    final isHoriz = meta.horiz[idx] == 1;
+    final length = meta.len[idx];
+    final fixed = meta.fixed[idx];
+    final currentPos = boardState[idx];
+    final isTarget = idx == meta.targetIndex;
     final cs = cellSize;
-    final bp = blockPadding;
+    final bp = cs * 0.045; // block padding
 
-    // ── 1. Destination cells (where the block will slide to) ──────────────
+    final hintColor = isTarget ? Palette.targetEnd : Palette.accent;
+
+    // ── 1. Destination Ghost Footprint ─────────────────────────────────────
     final destPos = currentPos + move.delta;
-    final destColor = _blockColor.withValues(alpha: 0.18 + 0.10 * pulseValue);
-    final destBorderColor = _blockColor.withValues(alpha: 0.55 + 0.20 * pulseValue);
-
-    for (int i = 0; i < length; i++) {
-      double cellLeft, cellTop;
-      if (isHoriz) {
-        cellLeft = (destPos + i) * cs + bp;
-        cellTop = fixed * cs + bp;
-      } else {
-        cellLeft = fixed * cs + bp;
-        cellTop = (destPos + i) * cs + bp;
-      }
-      final destRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(cellLeft, cellTop, cs - bp * 2, cs - bp * 2),
-        const Radius.circular(9),
-      );
-      // Fill
-      canvas.drawRRect(destRect, Paint()..color = destColor);
-      // Border
-      canvas.drawRRect(destRect, Paint()
-        ..color = destBorderColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0);
-    }
-
-    // ── 2. Block highlight glow (hinted block itself) ─────────────────────
-    double left, top, w, h;
+    double dLeft, dTop, dWidth, dHeight;
     if (isHoriz) {
-      left = currentPos * cs + bp;
-      top = fixed * cs + bp;
-      w = length * cs - bp * 2;
-      h = cs - bp * 2;
+      dLeft = destPos * cs + bp;
+      dTop = fixed * cs + bp;
+      dWidth = length * cs - bp * 2;
+      dHeight = cs - bp * 2;
     } else {
-      left = fixed * cs + bp;
-      top = currentPos * cs + bp;
-      w = cs - bp * 2;
-      h = length * cs - bp * 2;
+      dLeft = fixed * cs + bp;
+      dTop = destPos * cs + bp;
+      dWidth = cs - bp * 2;
+      dHeight = length * cs - bp * 2;
     }
 
-    final glowRadius = 14.0 + 8.0 * pulseValue;
-    final blockCenter = Offset(left + w / 2, top + h / 2);
+    final destRRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(dLeft, dTop, dWidth, dHeight),
+      const Radius.circular(10),
+    );
 
-    // Outer glow
+    // Soft destination fill
+    canvas.drawRRect(
+      destRRect,
+      Paint()
+        ..color = hintColor.withValues(alpha: 0.16 + 0.08 * pulseValue)
+        ..style = PaintingStyle.fill,
+    );
+
+    // Glowing destination stroke
+    canvas.drawRRect(
+      destRRect,
+      Paint()
+        ..color = hintColor.withValues(alpha: 0.65 + 0.25 * pulseValue)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2,
+    );
+
+    // ── 2. Highlight Source Block (Golden Glow & Border) ───────────────────
+    double sLeft, sTop, sWidth, sHeight;
+    if (isHoriz) {
+      sLeft = currentPos * cs + bp;
+      sTop = fixed * cs + bp;
+      sWidth = length * cs - bp * 2;
+      sHeight = cs - bp * 2;
+    } else {
+      sLeft = fixed * cs + bp;
+      sTop = currentPos * cs + bp;
+      sWidth = cs - bp * 2;
+      sHeight = length * cs - bp * 2;
+    }
+
+    final srcRRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(sLeft, sTop, sWidth, sHeight),
+      const Radius.circular(10),
+    );
+
+    // Outer glow around block
+    final glowRadius = 14.0 + 8.0 * pulseValue;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: blockCenter, width: w + glowRadius, height: h + glowRadius),
-        const Radius.circular(16),
+        Rect.fromCenter(
+          center: Offset(sLeft + sWidth / 2, sTop + sHeight / 2),
+          width: sWidth + glowRadius,
+          height: sHeight + glowRadius,
+        ),
+        const Radius.circular(14),
       ),
       Paint()
-        ..color = _blockColor.withValues(alpha: 0.20 * pulseValue)
+        ..color = hintColor.withValues(alpha: 0.28 * pulseValue)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowRadius),
     );
 
-    // Block face re-draw as bright highlight
+    // Pulsing bright border
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(left, top, w, h), const Radius.circular(10)),
+      srcRRect,
       Paint()
-        ..color = _blockColor.withValues(alpha: 0.55 + 0.20 * pulseValue)
-        ..style = PaintingStyle.fill,
-    );
-    // Bright border
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(left, top, w, h), const Radius.circular(10)),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.65 + 0.25 * pulseValue)
+        ..color = Colors.white.withValues(alpha: 0.85 + 0.15 * pulseValue)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5,
+        ..strokeWidth = 2.4,
     );
 
-    // ── 3. Animated neon arrow ────────────────────────────────────────────
-    _drawAnimatedArrow(canvas, left, top, w, h, destPos, cs);
-  }
+    // ── 3. Trajectory Arrow ───────────────────────────────────────────────
+    final Offset arrowStart = Offset(sLeft + sWidth / 2, sTop + sHeight / 2);
+    final Offset arrowEnd = Offset(dLeft + dWidth / 2, dTop + dHeight / 2);
 
-  void _drawAnimatedArrow(
-    Canvas canvas,
-    double blockLeft,
-    double blockTop,
-    double blockW,
-    double blockH,
-    int destPos,
-    double cs,
-  ) {
-    // Arrow travels from block edge → destination cell center
-    Offset arrowStart, arrowEnd;
-    if (isHoriz) {
-      final blockCenterY = blockTop + blockH / 2;
-      if (move.delta > 0) {
-        // moving right
-        arrowStart = Offset(blockLeft + blockW + 6, blockCenterY);
-        arrowEnd = Offset((destPos + length) * cs - blockPadding - 6, blockCenterY);
-      } else {
-        // moving left
-        arrowStart = Offset(blockLeft - 6, blockCenterY);
-        arrowEnd = Offset(destPos * cs + blockPadding + 6, blockCenterY);
-      }
-    } else {
-      final blockCenterX = blockLeft + blockW / 2;
-      if (move.delta > 0) {
-        // moving down
-        arrowStart = Offset(blockCenterX, blockTop + blockH + 6);
-        arrowEnd = Offset(blockCenterX, (destPos + length) * cs - blockPadding - 6);
-      } else {
-        // moving up
-        arrowStart = Offset(blockCenterX, blockTop - 6);
-        arrowEnd = Offset(blockCenterX, destPos * cs + blockPadding + 6);
-      }
-    }
-
-    // Animate arrow: the head travels along the path based on arrowValue
-    final animatedEnd = Offset.lerp(arrowStart, arrowEnd, arrowValue)!;
-
-    final arrowColor = _blockColor;
-
-    // Glowing trail line
-    final trailPaint = Paint()
-      ..color = arrowColor.withValues(alpha: 0.35)
-      ..strokeWidth = 3.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    canvas.drawLine(arrowStart, arrowEnd, trailPaint);
-
-    // Solid line from start to animated head
-    final solidPaint = Paint()
-      ..color = arrowColor.withValues(alpha: 0.85)
-      ..strokeWidth = 3.0
+    // Trajectory background rail
+    final railPaint = Paint()
+      ..color = hintColor.withValues(alpha: 0.35)
+      ..strokeWidth = 3.2
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(arrowStart, animatedEnd, solidPaint);
+    canvas.drawLine(arrowStart, arrowEnd, railPaint);
 
-    // Arrowhead at animated position
-    _drawArrowhead(canvas, arrowStart, animatedEnd, arrowColor);
+    // Animated sliding arrow tip
+    final currentTip = Offset.lerp(arrowStart, arrowEnd, slideValue)!;
+    final activePaint = Paint()
+      ..color = hintColor
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(arrowStart, currentTip, activePaint);
+
+    _drawArrowhead(canvas, arrowStart, currentTip, hintColor);
   }
 
   void _drawArrowhead(Canvas canvas, Offset from, Offset to, Color color) {
     final angle = math.atan2(to.dy - from.dy, to.dx - from.dx);
-    const size = 12.0;
-    const spread = math.pi / 5.5;
+    const size = 11.0;
+    const spread = math.pi / 5.2;
 
     final path = Path()
       ..moveTo(to.dx, to.dy)
@@ -304,8 +329,8 @@ class _HintPainter extends CustomPainter {
         to.dy - size * math.sin(angle - spread),
       )
       ..lineTo(
-        to.dx - size * 0.55 * math.cos(angle),
-        to.dy - size * 0.55 * math.sin(angle),
+        to.dx - size * 0.5 * math.cos(angle),
+        to.dy - size * 0.5 * math.sin(angle),
       )
       ..lineTo(
         to.dx - size * math.cos(angle + spread),
@@ -313,82 +338,161 @@ class _HintPainter extends CustomPainter {
       )
       ..close();
 
-    // Glow
-    canvas.drawPath(path, Paint()
-      ..color = color.withValues(alpha: 0.40)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
-    // Fill
     canvas.drawPath(path, Paint()..color = color);
-    // White edge
-    canvas.drawPath(path, Paint()
-      ..color = Colors.white.withValues(alpha: 0.55)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.70)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _BoardHintPainter oldDelegate) => true;
 }
 
-// ─── "Kaydır!" label widget ───────────────────────────────────────────────────
-
-class _HintLabel extends StatelessWidget {
-  final bool isHoriz;
-  final int fixed;
-  final int currentPos;
+/// Interactive HUD Card shown when a hint is active.
+/// Provides:
+/// - Lightbulb icon and clear instruction text.
+/// - [HAMLEYİ YAP] 3D button for 1-tap auto glide move execution.
+/// - [✕] Close button to dismiss hint.
+class HintActionCard extends StatelessWidget {
+  final BoardMeta meta;
   final Move move;
-  final int length;
-  final double cellSize;
+  final VoidCallback onApply;
+  final VoidCallback onDismiss;
 
-  const _HintLabel({
-    required this.isHoriz,
-    required this.fixed,
-    required this.currentPos,
+  const HintActionCard({
+    super.key,
+    required this.meta,
     required this.move,
-    required this.length,
-    required this.cellSize,
+    required this.onApply,
+    required this.onDismiss,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Position the label near the destination
-    final cs = cellSize;
-    final destPos = currentPos + move.delta;
-
-    double labelLeft, labelTop;
-    if (isHoriz) {
-      labelLeft = (destPos + length / 2.0) * cs - 36;
-      labelTop = fixed * cs - 34;
-    } else {
-      labelLeft = fixed * cs - 42;
-      labelTop = (destPos + length / 2.0) * cs - 18;
-    }
-
     final s = S.of(context);
-    return Positioned(
-      left: labelLeft.clamp(4, double.infinity),
-      top: labelTop.clamp(4, double.infinity),
+    final instruction = getHintMoveInstruction(context, meta, move);
+    final isTarget = move.pieceIndex == meta.targetIndex;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1),
+          color: Palette.cardBg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isTarget
+                ? Palette.targetEnd.withValues(alpha: 0.40)
+                : Palette.accent.withValues(alpha: 0.40),
+            width: 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.30),
-              blurRadius: 8,
-            )
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
-        child: Text(
-          s.slide,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-          ),
+        child: Row(
+          children: [
+            // Bulb Icon Container
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: (isTarget ? Palette.targetEnd : Palette.accent)
+                    .withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.lightbulb_rounded,
+                color: isTarget ? Palette.targetEnd : Palette.accent,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // Instruction Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    s.hintTitle,
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                      color: isTarget ? Palette.targetEnd : Palette.accent,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    instruction,
+                    style: ThemeConfig.bodyStyle.copyWith(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: Palette.textHigh,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Apply Move Button
+            SizedBox(
+              height: 38,
+              child: ChunkyButton(
+                color: Palette.primary,
+                shadowColor: Palette.primaryDark,
+                borderRadius: 12,
+                depth: 3,
+                onPressed: onApply,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      s.hintApply,
+                      style: const TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+
+            // Dismiss Button
+            GestureDetector(
+              onTap: onDismiss,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Palette.cellPocket.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: Palette.textLow,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

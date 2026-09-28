@@ -70,12 +70,13 @@ class InstallBanner extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Palette.cellPocket,
+        color: Palette.cardBg,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Palette.cardBorder, width: 1.2),
       ),
       child: Row(
         children: [
-          const Icon(Icons.install_mobile_outlined, color: Palette.textHigh, size: 20),
+          Icon(Icons.install_mobile_outlined, color: Palette.textHigh, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: GestureDetector(
@@ -92,7 +93,7 @@ class InstallBanner extends StatelessWidget {
           IconButton(
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
-            icon: const Icon(Icons.close, color: Palette.textLow, size: 18),
+            icon: Icon(Icons.close, color: Palette.textLow, size: 18),
             onPressed: onDismiss,
           ),
         ],

@@ -35,9 +35,12 @@ class LevelRepository {
   GeneratedLevel? getCachedLevel(int levelNumber) => _cache[levelNumber];
 
   Future<GeneratedLevel> _generate(int levelNumber) async {
-    // Only use isolates for standard progression levels >= 121 (to avoid web worker constraints elsewhere)
+    // Only use isolates for standard progression levels >= 121 on native platforms
     if (levelNumber >= 121 && levelNumber < 9999 && !kIsWeb) {
       return await compute(_generateLevelIsolate, levelNumber);
+    } else if (kIsWeb) {
+      // On web, use cooperative async generator that yields to event loop
+      return await generateAsync(level: levelNumber);
     } else {
       return generate(level: levelNumber);
     }

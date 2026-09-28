@@ -81,6 +81,10 @@ class S {
   String get settingsTitle => isTr ? 'AYARLAR' : 'SETTINGS';
   String get haptics => isTr ? 'TİTREŞİM' : 'HAPTICS';
   String get sound => isTr ? 'SES' : 'SOUND';
+  String get themeLabel => isTr ? 'TEMA' : 'THEME';
+  String get themeSystem => isTr ? 'SİSTEM' : 'SYSTEM';
+  String get themeLight => isTr ? 'AÇIK' : 'LIGHT';
+  String get themeDark => isTr ? 'KOYU' : 'DARK';
   String get languageLabel => isTr ? 'UYGULAMA DİLİ' : 'APP LANGUAGE';
   String get langSystem => isTr ? 'SİSTEM' : 'SYSTEM';
   String get langTr => isTr ? 'TÜRKÇE' : 'TURKISH';
@@ -128,4 +132,74 @@ class S {
   List<String> get monthsList => isTr
       ? ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
       : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // ── Star Gate (Yıldız Kapısı) ──────────────────────────────────────────
+  String get starGateTitle => isTr ? 'YILDIZ KAPISI' : 'STAR GATE';
+  String get starGateLocked => isTr ? 'KİLİTLİ' : 'LOCKED';
+  String starGateRequired(int req, int cur) => isTr
+      ? 'Bu bölüme geçmek için $req ⭐ gerekli. (Şu an: $cur ⭐)'
+      : 'Requires $req ⭐ to unlock this level. (Current: $cur ⭐)';
+  String get starGateTip => isTr
+      ? 'Önceki bölümleri daha az hamleyle tekrar oynayarak 3 yıldız toplayabilirsin!'
+      : 'Replay previous levels with fewer moves to collect 3 stars!';
+  String starGateBlockedSheetDesc(int req, int cur) => isTr
+      ? '51. ve sonraki bölümlere geçmek için en az $req ⭐ toplamalısın! (Şu an: $cur ⭐)'
+      : 'Collect at least $req ⭐ to unlock level 51 and beyond! (Current: $cur ⭐)';
+  String get toLevels => isTr ? 'BÖLÜMLERE DÖN' : 'LEVELS LIST';
+  String get stars => isTr ? 'Yıldız' : 'Stars';
+
+  // ── Tutorial & Optimal Route Guide (İlk 5 Seviye Yol Tarifi) ─────────
+  String get tutorialGotIt => isTr ? 'ANLADIM' : 'GOT IT';
+  String get tutorialTapToDismiss => isTr ? 'Başlamak için kaydır veya dokun' : 'Swipe or tap to begin';
+  String get yolTarifi => isTr ? 'YOL TARİFİ' : 'ROUTE GUIDE';
+  String get rehberGizle => isTr ? 'Gizle' : 'Hide';
+  String get rehberGoster => isTr ? 'Yol Tarifi' : 'Guide';
+  String get optimalRouteReady => isTr ? 'En optimal rota hazır' : 'Optimal route ready';
+  String stepFormat(int current, int total) => isTr ? 'Adım $current / $total' : 'Step $current / $total';
+
+  String get tutorialTitle1 => isTr ? '1. AŞAMA: ÇIKIŞA ULAŞ' : 'STAGE 1: REACH THE EXIT';
+  String get tutorialDesc1 => isTr
+      ? 'Kırmızı bloğu sağdaki çıkış kapısına doğru kaydır.'
+      : 'Slide the red block rightward to the exit gate.';
+
+  String get tutorialTitle2 => isTr ? '2. AŞAMA: ENGELLERİ KALDIR' : 'STAGE 2: CLEAR OBSTACLES';
+  String get tutorialDesc2 => isTr
+      ? 'Kırmızı bloğun önünü açmak için önce engel blokları kaydır.'
+      : 'Slide other blocks to clear a path for the red block.';
+
+  String get tutorialTitle3 => isTr ? '3. AŞAMA: HAREKET EKSENLERİ' : 'STAGE 3: MOVEMENT AXIS';
+  String get tutorialDesc3 => isTr
+      ? 'Yatay bloklar yalnızca sağa-sola, dikey bloklar ise yukarı-aşağı kayar.'
+      : 'Horizontal blocks slide left/right, vertical blocks slide up/down.';
+
+  String get tutorialTitle4 => isTr ? '4. AŞAMA: ZİNCİRLEME HAMLE' : 'STAGE 4: CHAIN MOVES';
+  String get tutorialDesc4 => isTr
+      ? 'Bir bloğu kaydırmak için bazen diğerlerini kenara çekmek gerekir.'
+      : 'Sometimes you must slide other blocks aside to unlock the way.';
+
+  String get tutorialTitle5 => isTr ? '5. AŞAMA: OPTİMAL ROTA & 3 YILDIZ' : 'STAGE 5: OPTIMAL ROUTE';
+  String get tutorialDesc5 => isTr
+      ? 'En kısa rotayı izleyerek 3 yıldızı kap! Hamle sayısını optimalde tut.'
+      : 'Follow the shortest path for 3 stars! Keep moves at optimal.';
+
+  // Dynamic turn-by-turn move guides
+  String slideRedRight(int n) => isTr ? 'Kırmızı bloğu $n birim sağa kaydır ➔ Çıkışa!' : 'Slide red block $n cells right ➔ To exit!';
+  String slideRedLeft(int n) => isTr ? 'Kırmızı bloğu $n birim sola kaydır' : 'Slide red block $n cells left';
+  String slideHorizRight(int n) => isTr ? 'Yatay bloğu $n birim sağa kaydır' : 'Slide horizontal block $n cells right';
+  String slideHorizLeft(int n) => isTr ? 'Yatay bloğu $n birim sola kaydır' : 'Slide horizontal block $n cells left';
+  String slideVertDown(int n) => isTr ? 'Dikey bloğu $n birim aşağı kaydır' : 'Slide vertical block $n cells down';
+  String slideVertUp(int n) => isTr ? 'Dikey bloğu $n birim yukarı kaydır' : 'Slide vertical block $n cells up';
+
+  // ── Hint Action Banner & Feedback ─────────────────────────────────────
+  String get hintTitle => isTr ? 'İPUCU' : 'HINT';
+  String get hintApply => isTr ? 'HAMLEYİ YAP' : 'PLAY MOVE';
+  String get hintClose => isTr ? 'KAPAT' : 'CLOSE';
+  String get noHintsLeft => isTr ? 'İpucu kalmadı!' : 'No hints left!';
+  String get hintActiveNotice => isTr ? 'İpucu zaten aktif' : 'Hint is already active';
+
+  // ── Levels Screen Tier & Progress ─────────────────────────────────────
+  String solvedCount(int cur, int total) => isTr ? '$cur / $total Çözüldü' : '$cur / $total Solved';
+  String tierProgressTitle(int tier, int start, int end) =>
+      isTr ? 'Aşama $tier • Bölüm $start-$end' : 'Tier $tier • Levels $start-$end';
+  String get currentLevelBadge => isTr ? 'ŞU AN' : 'PLAY';
 }

@@ -24,7 +24,7 @@ void main() async {
 
   // System UI: Transparent status bar, light icons, light navigation bar
   SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
+    SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
       systemNavigationBarColor: Palette.bgEnd,

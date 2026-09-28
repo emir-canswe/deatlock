@@ -54,51 +54,63 @@ class TopBar extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
         children: [
           // Back button chunky box
           ChunkyButton(
-            color: Colors.white,
-            shadowColor: const Color(0xFFCBD5E1),
-            borderRadius: 24,
-            width: 48,
-            height: 48,
+            color: Palette.buttonWhiteBg,
+            shadowColor: Palette.buttonWhiteShadow,
+            borderRadius: 22,
+            width: 46,
+            height: 46,
             depth: 3,
             onPressed: onBack,
-            child: const Icon(
+            child: Icon(
               Icons.chevron_left_rounded,
               color: Palette.textHigh,
               size: 26,
             ),
           ),
-          const SizedBox(width: 12),
-          // Title box (3D Pill)
+          const SizedBox(width: 10),
+          // Title box (Modern HUD Pill)
           Expanded(
             child: _PillBox(
               child: Text(
                 title,
                 textAlign: TextAlign.center,
                 style: ThemeConfig.titleStyle.copyWith(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.6,
                   color: Palette.textHigh,
                 ),
               ),
             ),
           ),
           if (statText.isNotEmpty) ...[
-            const SizedBox(width: 12),
-            // Stat counter box (3D Pill)
+            const SizedBox(width: 10),
+            // Stat counter box (Modern HUD Pill)
             _PillBox(
-              child: Text(
-                statText,
-                style: ThemeConfig.counterStyle.copyWith(
-                  color: isOverOptimal ? Palette.targetEnd : Palette.textHigh,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
+              borderColor: isOverOptimal ? Palette.targetEnd.withValues(alpha: 0.7) : null,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.touch_app_rounded,
+                    size: 14,
+                    color: isOverOptimal ? Palette.targetEnd : Palette.textLow,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    statText,
+                    style: ThemeConfig.counterStyle.copyWith(
+                      color: isOverOptimal ? Palette.targetEnd : Palette.textHigh,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -110,22 +122,27 @@ class TopBar extends StatelessWidget {
 
 class _PillBox extends StatelessWidget {
   final Widget child;
+  final Color? borderColor;
 
-  const _PillBox({required this.child});
+  const _PillBox({required this.child, this.borderColor});
 
   @override
   Widget build(BuildContext context) {
+    final border = borderColor ??
+        (Palette.isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1));
+    final shadow = Palette.isDark ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1);
+
     return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Palette.textHigh, width: 2.2),
-        boxShadow: const [
+        color: Palette.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: border, width: 1.8),
+        boxShadow: [
           BoxShadow(
-            color: Palette.textHigh,
-            offset: Offset(0, 3.5),
+            color: shadow,
+            offset: const Offset(0, 2.5),
             blurRadius: 0,
           ),
         ],

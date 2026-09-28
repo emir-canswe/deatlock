@@ -19,10 +19,35 @@ class BoardView extends StatefulWidget {
   });
 
   @override
-  State<BoardView> createState() => _BoardViewState();
+  BoardViewState createState() => BoardViewState();
 }
 
-class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
+class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
+  /// Programmatically animates a move with a smooth glide (used by hint auto-play).
+  void animateMove(Move move) {
+    if (widget.controller.won || _snapController.isAnimating) return;
+    if (_cellSize <= 0) return;
+    final pieceIndex = move.pieceIndex;
+    final delta = move.delta;
+    final targetPixels = delta * _cellSize;
+
+    Haptics.selectionClick();
+    Audio.playSlide();
+    setState(() {
+      _dragPieceId = pieceIndex;
+      _snapPieceId = pieceIndex;
+      _snapFrom = 0.0;
+      _snapTo = targetPixels;
+      _dragPixelOffset = 0.0;
+    });
+
+    _snapController.duration = const Duration(milliseconds: 320);
+    _snapController.forward(from: 0.0).then((_) {
+      if (mounted) {
+        _snapController.duration = Motion.releaseDuration;
+      }
+    });
+  }
   late final AnimationController _breathingController;
   late final AnimationController _exitArrowController;
   late final AnimationController _shakeController;
@@ -39,6 +64,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   int _dragMinDelta = 0;
   int _dragMaxDelta = 0;
   double _dragStartPixel = 0.0;
+  int _lastDragStep = 0;
 
   int? _shakePieceId;
 
@@ -102,11 +128,10 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
         if (_snapPieceId != null) {
           final delta = (_snapTo / _cellSize).round();
           if (delta != 0) {
+            Audio.playSlide();
             widget.controller.applyMove(Move(_snapPieceId!, delta));
             if (widget.controller.won) {
               _triggerWinSequence();
-            } else {
-              Audio.playSlide();
             }
           }
           setState(() {
@@ -150,7 +175,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
 
   void _triggerWinSequence() {
-    Haptics.mediumImpact();
+    Haptics.winVibration();
     Audio.playWin();
     
     // Gather block colors to spawn matching confetti
@@ -210,6 +235,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       _dragMinDelta = range.$1;
       _dragMaxDelta = range.$2;
       _dragStartPixel = isHoriz ? details.localPosition.dx : details.localPosition.dy;
+      _lastDragStep = 0;
     });
   }
 
@@ -228,11 +254,21 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     setState(() {
       _dragPixelOffset = rawOffset;
     });
+
+    if (_cellSize > 0) {
+      final step = (rawOffset / _cellSize).round();
+      if (step != _lastDragStep) {
+        _lastDragStep = step;
+        Audio.playSlide();
+        Haptics.selectionClick();
+      }
+    }
   }
 
   void _onPanEnd(DragEndDetails details) {
     if (_dragPieceId == null) return;
 
+    _lastDragStep = 0;
     int targetDelta = 0;
     // Flick/swipe threshold: if dragged by more than 6 pixels, auto-slide all the way!
     if (_dragPixelOffset > 6.0) {
@@ -241,6 +277,10 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       targetDelta = _dragMinDelta;
     } else {
       targetDelta = 0;
+    }
+
+    if (targetDelta != 0) {
+      Audio.playSlide();
     }
 
     final targetPixel = targetDelta * _cellSize;
@@ -297,6 +337,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
     if (targetDelta != 0) {
       Haptics.selectionClick();
+      Audio.playSlide();
       setState(() {
         _snapFrom = 0.0;
         _snapTo = targetDelta * _cellSize;
@@ -353,6 +394,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                                   dragPixelOffset: _dragPieceId != null ? _dragPixelOffset : shakeOffset,
                                   breathingValue: _breathingController.value,
                                   exitArrowValue: _exitArrowController.value,
+                                  isDark: Palette.isDark,
                                 ),
                                 size: Size(boardPixels, boardPixels),
                               );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/palette.dart';
 import '../../core/theme.dart';
 import '../../core/strings.dart';
+import '../../domain/game_mode.dart';
 import '../../state/progress_controller.dart';
 
 /// Screen displaying the history of the daily levels solved over the last 30 days.
@@ -21,11 +22,11 @@ class DailyHistoryScreen extends StatelessWidget {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment(-0.25, -1.0),
-            end: Alignment(0.25, 1.0),
-            colors: [Palette.bgStart, Color(0xFFFDF0E4), Palette.bgEnd],
+            begin: const Alignment(-0.25, -1.0),
+            end: const Alignment(0.25, 1.0),
+            colors: [Palette.bgStart, Palette.bgMiddle(GameMode.daily), Palette.bgEnd],
           ),
         ),
         child: SafeArea(
@@ -37,7 +38,7 @@ class DailyHistoryScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.chevron_left, color: Palette.textHigh, size: 28),
+                      icon: Icon(Icons.chevron_left, color: Palette.textHigh, size: 28),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     const Spacer(),
@@ -56,13 +57,13 @@ class DailyHistoryScreen extends StatelessWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 24),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Palette.boardBg,
+                  color: Palette.cardBg,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
-                      color: Palette.shadowColor,
+                      color: Palette.cardShadow,
                       blurRadius: 16,
-                      offset: Offset(0, 4),
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -103,13 +104,13 @@ class DailyHistoryScreen extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: Palette.boardBg,
+                        color: Palette.cardBg,
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(
-                            color: Palette.shadowColor,
+                            color: Palette.cardShadow,
                             blurRadius: 8,
-                            offset: Offset(0, 2),
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),

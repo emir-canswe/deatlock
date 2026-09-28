@@ -10,6 +10,7 @@ class BoardPainter extends CustomPainter {
   final int? dragPieceId;
   final double dragPixelOffset;
   final double cellSize;
+  final bool isDark;
 
   // Animation values
   final double breathingValue; // 0..1 for target glow breathing
@@ -23,6 +24,7 @@ class BoardPainter extends CustomPainter {
     this.dragPixelOffset = 0.0,
     this.breathingValue = 0.0,
     this.exitArrowValue = 0.0,
+    this.isDark = false,
   });
 
   @override
@@ -48,11 +50,11 @@ class BoardPainter extends CustomPainter {
     // Draw frame shadow
     canvas.drawRRect(outerBoardRect.shift(const Offset(0, 8)), shadowPaint);
 
-    // Draw deep blue toy frame base
-    final framePaint = Paint()..color = const Color(0xFF0C447C);
+    // Draw deep blue/slate toy frame base
+    final framePaint = Paint()..color = Palette.boardOuterFrame;
     canvas.drawRRect(outerBoardRect, framePaint);
 
-    // Draw inner white playing surface
+    // Draw inner white/dark playing surface
     final bgPaint = Paint()..color = Palette.boardBg;
     canvas.drawRRect(boardRect, bgPaint);
 
@@ -60,7 +62,7 @@ class BoardPainter extends CustomPainter {
     final cellPadding = cellSize * 0.035;
     final pocketPaint = Paint()..color = Palette.cellPocket;
     final pocketBorderPaint = Paint()
-      ..color = const Color(0xFFE2E8F0)
+      ..color = Palette.cellPocketBorder
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
@@ -144,7 +146,7 @@ class BoardPainter extends CustomPainter {
           fontFamily: 'Nunito',
           fontSize: 20, // larger font size
           fontWeight: FontWeight.w900,
-          color: const Color(0xFF19BFA0).withOpacity(arrowOpacity),
+          color: Palette.exitArrowColor.withOpacity(arrowOpacity),
         ),
       );
       exitArrowTextPainter.layout();
@@ -238,7 +240,7 @@ class BoardPainter extends CustomPainter {
 
       if (isTarget) {
         bodyColor = Palette.targetStart;
-        borderColor = const Color(0xFF991B1B);
+        borderColor = Palette.targetBorder;
         useGradientBody = true;
       } else {
         final pair = Palette.normalBlockGradients[i % Palette.normalBlockGradients.length];
@@ -327,6 +329,7 @@ class BoardPainter extends CustomPainter {
         dragPixelOffset != oldDelegate.dragPixelOffset ||
         cellSize != oldDelegate.cellSize ||
         breathingValue != oldDelegate.breathingValue ||
-        exitArrowValue != oldDelegate.exitArrowValue;
+        exitArrowValue != oldDelegate.exitArrowValue ||
+        isDark != oldDelegate.isDark;
   }
 }

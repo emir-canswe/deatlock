@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/audio.dart';
 import '../../core/haptics.dart';
 import '../../core/palette.dart';
 import '../../core/strings.dart';
@@ -9,6 +10,7 @@ import '../../data/daily_store.dart';
 import '../../domain/game_mode.dart';
 import '../../domain/hint.dart';
 import '../../domain/move.dart';
+import '../../domain/star_gate.dart';
 import '../../state/game_controller.dart';
 import '../../state/progress_controller.dart';
 import '../../state/sprint_controller.dart';
@@ -17,6 +19,8 @@ import '../widgets/bottom_bar.dart';
 import '../widgets/hint_overlay.dart';
 import '../widgets/sprint_bar.dart';
 import '../widgets/top_bar.dart';
+import '../widgets/tutorial_overlay.dart';
+import '../widgets/win_confetti.dart';
 import '../widgets/win_sheet.dart';
 
 class GameScreen extends StatefulWidget {
@@ -44,6 +48,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   bool _loading = true;
   bool _showWin = false;
+  bool _guideMinimized = false;
+
+  // Board view key for animating auto-play hint moves
+  final GlobalKey<BoardViewState> _boardViewKey = GlobalKey<BoardViewState>();
 
   // Hint state
   int? _hintPieceIndex;
@@ -105,6 +113,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _showWin = false;
       _hintPieceIndex = null;
       _hintMove = null;
+      _guideMinimized = false;
     });
 
     int seed;
@@ -143,16 +152,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _onGameChange() {
     if (!mounted) return;
+    if (_hintPieceIndex != null) {
+      _hintPieceIndex = null;
+      _hintMove = null;
+    }
     setState(() {});
   }
 
   void _onWin() {
+    Haptics.winVibration();
     if (widget.mode == GameMode.sprint) {
       _sprintController?.recordWin();
-      Haptics.mediumImpact();
       _loadLevel();
     } else if (widget.mode == GameMode.zen) {
-      Haptics.mediumImpact();
       _triggerZenTransition();
     } else {
       if (widget.mode == GameMode.levels) {
@@ -160,6 +172,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _currentLevelNumber,
           _gameController!.moveCount,
           _gameController!.isPerfect,
+          optimalMoves: _gameController!.optimalMoves,
+          hintUsed: _gameController!.hintUsed,
         );
       } else if (widget.mode == GameMode.daily) {
         widget.progressController.recordDailyWin(_gameController!.moveCount);
@@ -194,7 +208,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         builder: (ctx) {
           final s = S.of(ctx);
           return AlertDialog(
-            backgroundColor: Palette.boardBg,
+            backgroundColor: Palette.cardBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Text(s.warningTitle, style: ThemeConfig.titleStyle),
             content: Text(
               s.dailyResetWarning,
@@ -203,7 +218,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(s.cancelBtn, style: const TextStyle(color: Palette.textLow)),
+                child: Text(s.cancelBtn, style: TextStyle(color: Palette.textLow)),
               ),
               TextButton(
                 onPressed: () async {
@@ -225,20 +240,71 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _showHint() {
-    if (_gameController == null || (widget.progressController.hints <= 0 && widget.mode != GameMode.zen)) return;
+    if (_gameController == null || _gameController!.won) return;
+
+    final s = S.of(context);
+    final isHintZen = widget.mode == GameMode.zen;
+    final hasHints = widget.progressController.hints > 0 || isHintZen;
+
+    if (!hasHints) {
+      Haptics.lightImpact();
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            s.noHintsLeft,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Palette.textHigh,
+          duration: const Duration(milliseconds: 1400),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+        ),
+      );
+      return;
+    }
+
+    // If hint is already visible, don't deduct again — provide soft haptic
+    if (_hintPieceIndex != null && _hintMove != null) {
+      Haptics.lightImpact();
+      return;
+    }
 
     final bestMove = nextBestMove(_gameController!.meta, _gameController!.boardState);
     if (bestMove != null) {
-      if (widget.mode != GameMode.zen) {
+      if (!isHintZen) {
         widget.progressController.useHint();
       }
       _gameController!.markHintUsed();
+      Haptics.mediumImpact();
+      Audio.playSlide();
 
       setState(() {
         _hintPieceIndex = bestMove.pieceIndex;
         _hintMove = bestMove;
       });
     }
+  }
+
+  void _applyHint() {
+    if (_hintMove != null && _boardViewKey.currentState != null) {
+      final move = _hintMove!;
+      setState(() {
+        _hintPieceIndex = null;
+        _hintMove = null;
+      });
+      _boardViewKey.currentState!.animateMove(move);
+    }
+  }
+
+  void _dismissHint() {
+    Haptics.selectionClick();
+    setState(() {
+      _hintPieceIndex = null;
+      _hintMove = null;
+    });
   }
 
   void _startUndoRepeat() {
@@ -297,6 +363,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         if (activeMode == GameMode.sprint && _sprintController != null)
                           SprintBar(timeLeft: _sprintController!.timeLeft),
 
+                        // 2.5 Turn-by-Turn GPS Navigation Guide (Levels 1 to 5)
+                        if (activeMode == GameMode.levels &&
+                            _currentLevelNumber <= 5 &&
+                            !_showWin &&
+                            _gameController != null)
+                          TutorialGpsCard(
+                            levelNumber: _currentLevelNumber,
+                            meta: _gameController!.meta,
+                            boardState: _gameController!.boardState,
+                            optimalMoves: _gameController!.optimalMoves,
+                            isMinimized: _guideMinimized,
+                            onToggleMinimize: () {
+                              setState(() {
+                                _guideMinimized = !_guideMinimized;
+                              });
+                            },
+                          ),
+
                         const Spacer(),
 
                         // 3. Board Area
@@ -315,14 +399,64 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 ),
                               );
                             },
-                            child: BoardView(
-                              controller: _gameController!,
-                              onWin: _onWin,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final boardPixels = constraints.maxWidth * 0.92;
+                                final cellSize = boardPixels / 6;
+
+                                return Center(
+                                  child: SizedBox(
+                                    width: boardPixels,
+                                    height: boardPixels,
+                                    child: Stack(
+                                      children: [
+                                        BoardView(
+                                          key: _boardViewKey,
+                                          controller: _gameController!,
+                                          onWin: _onWin,
+                                        ),
+                                        if (activeMode == GameMode.levels &&
+                                            _currentLevelNumber <= 5 &&
+                                            !_guideMinimized &&
+                                            !_showWin &&
+                                            _gameController != null)
+                                          BoardGuideOverlay(
+                                            meta: _gameController!.meta,
+                                            boardState: _gameController!.boardState,
+                                            cellSize: cellSize,
+                                          ),
+                                        if (_hintPieceIndex != null &&
+                                            _hintMove != null &&
+                                            !_showWin &&
+                                            _gameController != null)
+                                          BoardHintOverlay(
+                                            meta: _gameController!.meta,
+                                            boardState: _gameController!.boardState,
+                                            move: _hintMove!,
+                                            cellSize: cellSize,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
 
                         const Spacer(),
+
+                        // Active Hint Action Card
+                        if (_hintPieceIndex != null &&
+                            _hintMove != null &&
+                            !_showWin &&
+                            _gameController != null)
+                          HintActionCard(
+                            meta: _gameController!.meta,
+                            move: _hintMove!,
+                            onApply: _applyHint,
+                            onDismiss: _dismissHint,
+                          ),
 
                         // 4. Bottom action pills
                         if (!_showWin)
@@ -339,48 +473,35 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       ],
                     ),
 
-                    // Ghost Hint Overlay
-                    if (_hintPieceIndex != null && _hintMove != null && _gameController != null)
+                    // Win Celebration Overlay & Sheet
+                    if (_showWin) ...[
+                      // Dimmed soft focus backdrop behind win sheet
                       Positioned.fill(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final boardPixels = constraints.maxWidth * 0.92;
-                            final cellSize = boardPixels / 6;
-                            final padding = cellSize * 0.045;
-
-                            final idx = _hintPieceIndex!;
-                            final meta = _gameController!.meta;
-
-                            return HintOverlay(
-                              pieceIndex: idx,
-                              length: meta.len[idx],
-                              isHoriz: meta.horiz[idx] == 1,
-                              fixed: meta.fixed[idx],
-                              isTarget: idx == meta.targetIndex,
-                              move: _hintMove!,
-                              currentPos: _gameController!.boardState[idx],
-                              cellSize: cellSize,
-                              blockPadding: padding,
-                              onDismiss: () {
-                                setState(() {
-                                  _hintPieceIndex = null;
-                                  _hintMove = null;
-                                });
-                              },
+                        child: TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 350),
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          builder: (context, opacity, _) {
+                            return Container(
+                              color: Colors.black.withValues(alpha: 0.45 * opacity),
                             );
                           },
                         ),
                       ),
 
-                    // Win Sheet overlay
-                    if (_showWin)
+                      // Full-screen celebratory Confetti & Sparkles
+                      const Positioned.fill(
+                        child: WinConfettiOverlay(),
+                      ),
+
+                      // Spring Bounce Win Sheet
                       Positioned(
                         left: 0,
                         right: 0,
                         bottom: 0,
                         child: TweenAnimationBuilder<Offset>(
-                          duration: const Duration(milliseconds: 300),
-                          tween: Tween(begin: const Offset(0, 1), end: Offset.zero),
+                          duration: const Duration(milliseconds: 440),
+                          curve: Curves.easeOutBack,
+                          tween: Tween(begin: const Offset(0, 1.15), end: Offset.zero),
                           builder: (context, offset, child) {
                             return FractionalTranslation(
                               translation: offset,
@@ -392,6 +513,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             moves: _gameController?.moveCount ?? 0,
                             optimalMoves: _gameController?.optimalMoves ?? 0,
                             hintUsed: _gameController?.hintUsed ?? false,
+                            isGateBlocked: activeMode == GameMode.levels &&
+                                widget.progressController.isGateBlockedForNext(_currentLevelNumber),
+                            requiredGateStars: StarGate.requiredStarsForLevel(_currentLevelNumber + 1),
+                            totalStars: widget.progressController.totalStars,
+                            onToLevels: () {
+                              Navigator.of(context).pop();
+                            },
                             dailyStreak: widget.progressController.dailyStore.streak,
                             dailyHistory: widget.progressController.dailyStore.getLast30DaysHistory(),
                             sprintScore: _sprintController?.score,
@@ -407,8 +535,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             },
                             onNext: () {
                               if (activeMode == GameMode.levels) {
-                                _currentLevelNumber++;
-                                _loadLevel();
+                                if (widget.progressController.isGateBlockedForNext(_currentLevelNumber)) {
+                                  Navigator.of(context).pop();
+                                } else {
+                                  _currentLevelNumber++;
+                                  _loadLevel();
+                                }
                               } else {
                                 Navigator.of(context).pop(); // Back to main menu
                               }
@@ -416,6 +548,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                    ],
                   ],
                 ),
         ),

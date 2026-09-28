@@ -35,4 +35,27 @@ class Haptics {
       HapticFeedback.mediumImpact();
     }
   }
+
+  static void heavyImpact() {
+    if (_enabled) {
+      HapticFeedback.heavyImpact();
+    }
+  }
+
+  static void vibrate() {
+    if (_enabled) {
+      HapticFeedback.vibrate();
+    }
+  }
+
+  /// Celebratory double-pulse vibration pattern for completing a level.
+  static void winVibration() {
+    if (!_enabled) return;
+    HapticFeedback.vibrate();
+    Future.delayed(const Duration(milliseconds: 140), () {
+      if (_enabled) {
+        HapticFeedback.vibrate();
+      }
+    });
+  }
 }
