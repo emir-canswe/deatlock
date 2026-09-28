@@ -134,56 +134,70 @@ void generateClick(File file) {
   writeWav16(file, samples, sampleRate);
 }
 
-/// Deep, juicy tactile wooden/neon block "thock" glide with warm acoustic resonance
-/// Optimized for mobile phone speakers and headphones alike (320-880Hz resonant presence)
-/// Duration: ~110ms at 44.1kHz
+/// Premium smooth block slide: silky plastic-on-surface glide with satisfying magnetic snap-lock
+/// Inspired by high-end sliding puzzle sounds (Monument Valley / Alto's Odyssey style)
+/// Duration: ~90ms — short enough to chain rapidly, rich enough to feel premium
 void generateSlide(File file) {
   const sampleRate = 44100;
-  const duration = 0.110;
+  const duration = 0.090;
   final numSamples = (sampleRate * duration).toInt();
   final samples = List<double>.filled(numSamples, 0.0);
 
-  final rand = math.Random(1337);
-  double phase = 0.0;
-  double noiseFiltered = 0.0;
+  final rand = math.Random(9999);
+  double lowPassNoise = 0.0;
+  double highPassNoise = 0.0;
+  double prevRaw = 0.0;
 
   for (int i = 0; i < numSamples; i++) {
     final t = i / sampleRate;
+    final rawNoise = rand.nextDouble() * 2.0 - 1.0;
 
-    // 1. Friction transient swoosh (air/surface glide)
-    final rawNoise = (rand.nextDouble() * 2.0 - 1.0);
-    // Bandpass around 1400Hz for clear presence
-    noiseFiltered += (rawNoise - noiseFiltered) * 0.22;
-    final frictionEnv = math.sin(math.min(math.pi, (t / duration) * math.pi)) * math.exp(-t / 0.035);
+    // ── 1. Silky glide layer ─────────────────────────────────────────
+    // Low-pass filtered white noise: simulates smooth surface friction (plastic/glass glide)
+    lowPassNoise += (rawNoise - lowPassNoise) * 0.08;
+    // High-pass filtered noise: adds a subtle bright "swoosh" presence
+    highPassNoise = rawNoise - prevRaw + 0.92 * highPassNoise;
+    prevRaw = rawNoise;
 
-    // 2. Tactile wooden/neon block body resonance: sweeps smoothly from 440Hz down to 310Hz
-    // This frequency range (E4-A4) is exceptionally audible on all mobile phone speakers.
-    final freq = 310.0 + 130.0 * math.exp(-t / 0.022);
-    phase += 2.0 * math.pi * freq / sampleRate;
+    // Glide envelope: fast 1ms ramp-up → sustain → gentle tail
+    final glideEnv = (1.0 - math.exp(-t / 0.001)) * math.exp(-t / 0.028);
+    final glide = (0.65 * lowPassNoise + 0.18 * highPassNoise) * glideEnv;
 
-    // Rich harmonic stack: fundamental + warm octave + bright presence
-    final body = math.sin(phase) +
-        0.42 * math.sin(phase * 2.0) +
-        0.18 * math.sin(phase * 3.0) +
-        0.12 * math.sin(phase * 0.5);
+    // ── 2. Tonal body: deep resonant "thock" ──────────────────────────
+    // Sweeps from 600Hz → 380Hz as block travels and settles
+    // This range (D5-G5) cuts through tiny phone speakers beautifully
+    final sweepFreq = 380.0 + 220.0 * math.exp(-t / 0.012);
+    // Slightly detuned second layer for richness (chorus-like width)
+    final sweepFreq2 = sweepFreq * 1.008;
 
-    // 3. Body envelope: punchy 1.5ms attack, snappy 38ms decay
-    final attack = 1.0 - math.exp(-t / 0.0015);
-    final bodyDecay = math.exp(-t / 0.035);
-    final bodyEnv = attack * bodyDecay;
+    final phase1 = 2.0 * math.pi * sweepFreq * t;
+    final phase2 = 2.0 * math.pi * sweepFreq2 * t;
 
-    // 4. Secondary snap-into-slot tactile "thock" at t=35ms
-    double settle = 0.0;
-    if (t > 0.030) {
-      final t2 = t - 0.030;
-      final settleTone = math.sin(2.0 * math.pi * 520.0 * t2) +
-          0.38 * math.sin(2.0 * math.pi * 1040.0 * t2);
-      settle = settleTone * math.exp(-t2 / 0.014) * 0.55;
+    // Pure fundamental + warm octave + 5th harmonic sparkle
+    final body = math.sin(phase1)
+        + 0.38 * math.sin(phase1 * 2.0)   // octave warmth
+        + 0.08 * math.sin(phase1 * 3.0)   // 5th harmonic sparkle
+        + 0.15 * math.sin(phase2);         // slight detuned chorus
+
+    // Body envelope: punchy 1ms attack, 22ms warm decay
+    final bodyEnv = (1.0 - math.exp(-t / 0.001)) * math.exp(-t / 0.018);
+
+    // ── 3. Magnetic snap-lock "click" at end of slide ────────────────
+    // Fires at ~50ms — the satisfying "clunk" as block locks into grid slot
+    double snapLock = 0.0;
+    if (t > 0.046) {
+      final ts = t - 0.046;
+      // Quick pitch-drop snap (680Hz → 420Hz) simulating piece landing in slot
+      final snapFreq = 420.0 + 260.0 * math.exp(-ts / 0.004);
+      final snapPhase = 2.0 * math.pi * snapFreq * ts;
+      final snap = math.sin(snapPhase) + 0.3 * math.sin(snapPhase * 2.1);
+      snapLock = snap * math.exp(-ts / 0.010) * 0.60;
     }
 
-    samples[i] = (0.30 * noiseFiltered * frictionEnv) +
-        (0.85 * body * bodyEnv) +
-        settle;
+    // ── 4. Mix with balanced levels ──────────────────────────────────
+    samples[i] = (0.22 * glide)
+               + (0.80 * body * bodyEnv)
+               + snapLock;
   }
 
   writeWav16(file, samples, sampleRate);
