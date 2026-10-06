@@ -73,7 +73,7 @@ class _DeadlockAppState extends State<DeadlockApp> with WidgetsBindingObserver {
         );
 
         return MaterialApp(
-          title: 'Deadlock',
+          title: 'Gridlock',
           debugShowCheckedModeBanner: false,
           theme: ThemeConfig.buildTheme(isDark: isDark),
           locale: appLocale,

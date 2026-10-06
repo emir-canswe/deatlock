@@ -1,11 +1,11 @@
 {
-    "name": "Deadlock",
-    "short_name": "Deadlock",
+    "name": "Gridlock",
+    "short_name": "Gridlock",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E6F1FB",
     "theme_color": "#E6F1FB",
-    "description": "Deadlock sliding-block puzzle game.",
+    "description": "Gridlock sliding-block puzzle game.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

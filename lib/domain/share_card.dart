@@ -7,7 +7,7 @@ String generateShareCard({
   bool isEnglish = false,
 }) {
   final buffer = StringBuffer();
-  buffer.writeln('Deadlock #$dailyNumber');
+  buffer.writeln('Gridlock #$dailyNumber');
   
   if (isEnglish) {
     buffer.writeln('$moves moves (optimal $optimal)');
