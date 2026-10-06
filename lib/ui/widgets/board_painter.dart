@@ -32,7 +32,7 @@ class BoardPainter extends CustomPainter {
     final boardPixels = cellSize * 6;
 
     // 1. Draw Board Shadow & Physical deep blue outer frame
-    final frameThickness = 8.0;
+    const frameThickness = 8.0;
     final outerBoardRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(-frameThickness, -frameThickness, boardPixels + frameThickness * 2, boardPixels + frameThickness * 2),
       Radius.circular(boardPixels * 0.065),
@@ -122,7 +122,7 @@ class BoardPainter extends CustomPainter {
 
     // Draw exit gate border outline
     final gateBorderPaint = Paint()
-      ..color = const Color(0xFF1D9E75).withOpacity(0.8)
+      ..color = const Color(0xFF1D9E75).withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.8;
     canvas.drawRect(
@@ -146,7 +146,7 @@ class BoardPainter extends CustomPainter {
           fontFamily: 'Nunito',
           fontSize: 20, // larger font size
           fontWeight: FontWeight.w900,
-          color: Palette.exitArrowColor.withOpacity(arrowOpacity),
+          color: Palette.exitArrowColor.withValues(alpha: arrowOpacity),
         ),
       );
       exitArrowTextPainter.layout();
@@ -158,7 +158,7 @@ class BoardPainter extends CustomPainter {
 
     // 4. Draw Blocks
     final blockPadding = cellSize * 0.045;
-    final blockRadius = const Radius.circular(10);
+    const blockRadius = Radius.circular(10);
     const highlightHeight = 2.0;
 
     for (int i = 0; i < meta.count; i++) {
@@ -203,7 +203,7 @@ class BoardPainter extends CustomPainter {
         final glowRadius = 18.0 * breatheScale;
 
         final targetGlowPaint = Paint()
-          ..color = Palette.targetGlow.withOpacity(glowOpacity)
+          ..color = Palette.targetGlow.withValues(alpha: glowOpacity)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowRadius);
 
         final targetCenter = Offset(left + w / 2, top + h / 2);
@@ -271,12 +271,12 @@ class BoardPainter extends CustomPainter {
 
       // Inner highlight line (top 2px white strip with 35% opacity)
       final highlightPaint = Paint()
-        ..color = Colors.white.withOpacity(0.35)
+        ..color = Colors.white.withValues(alpha: 0.35)
         ..style = PaintingStyle.fill;
 
       // Inner bottom shadow strip (bottom 4px dark strip with 15% opacity for 3D gloss effect)
       final darkShadowPaint = Paint()
-        ..color = Colors.black.withOpacity(0.15)
+        ..color = Colors.black.withValues(alpha: 0.15)
         ..style = PaintingStyle.fill;
 
       canvas.save();
@@ -287,27 +287,78 @@ class BoardPainter extends CustomPainter {
       canvas.drawRect(Rect.fromLTWH(left + 1, top + h - 5.0, w - 2, 4.0), darkShadowPaint);
       canvas.restore();
 
-      // Target block specific items: `›` character
-      if (isTarget) {
-        final textPainter = TextPainter(
-          text: const TextSpan(
-            text: '›',
-            style: TextStyle(
-              fontFamily: 'Nunito',
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Colors.white70,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
+      // ── Target block: unmistakable "slide me to the exit" styling ──
+      // A bullseye emblem marks it as THE goal piece, and flowing chevrons
+      // point the way out — so players instantly know which block to move.
+      if (isTarget && isHoriz) {
+        canvas.save();
+        canvas.clipRRect(blockRect);
 
-        // Position it on the right side of the block, centered vertically
-        final offset = Offset(
-          left + w - textPainter.width - 6,
-          top + (h - textPainter.height) / 2,
+        // Glossy top sheen for a premium, distinct look
+        final sheenRect = Rect.fromLTWH(left, top, w, h * 0.55);
+        final sheenPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withValues(alpha: 0.30),
+              Colors.white.withValues(alpha: 0.0),
+            ],
+          ).createShader(sheenRect);
+        canvas.drawRect(sheenRect, sheenPaint);
+
+        // Bullseye emblem on the left cap → "this is the piece to free"
+        final emblem = Offset(left + h * 0.52, top + h / 2);
+        final rOuter = h * 0.23;
+        canvas.drawCircle(
+          emblem,
+          rOuter,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = h * 0.07
+            ..color = Colors.white.withValues(alpha: 0.92),
         );
-        textPainter.paint(canvas, offset);
+        canvas.drawCircle(
+          emblem,
+          rOuter * 0.4,
+          Paint()..color = Colors.white.withValues(alpha: 0.95),
+        );
+
+        // Flowing chevrons across the body, pointing at the exit
+        final chevPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = h * 0.085
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        final zoneLeft = left + h * 1.02;
+        final zoneRight = left + w - h * 0.22;
+        final span = (zoneRight - zoneLeft).clamp(1.0, 100000.0);
+        const count = 3;
+        final spacing = span / count;
+        final chevH = h * 0.32;
+        final half = chevH / 2;
+        final cy = top + h / 2;
+        for (int k = 0; k < count; k++) {
+          final cx = zoneLeft + ((k + exitArrowValue) % count) * spacing;
+          final tpos = ((cx - zoneLeft) / span).clamp(0.0, 1.0);
+          final fade = (1.0 - (tpos - 0.5).abs() * 2).clamp(0.0, 1.0);
+          chevPaint.color = Colors.white.withValues(alpha: 0.18 + fade * 0.6);
+          final path = Path()
+            ..moveTo(cx - half * 0.55, cy - half)
+            ..lineTo(cx + half * 0.55, cy)
+            ..lineTo(cx - half * 0.55, cy + half);
+          canvas.drawPath(path, chevPaint);
+        }
+        canvas.restore();
+
+        // Bright inner outline so it reads as special vs. every other block
+        canvas.drawRRect(
+          blockRect.deflate(1.6),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..color = Colors.white.withValues(alpha: 0.5),
+        );
       }
     }
   }

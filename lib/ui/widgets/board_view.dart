@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/audio.dart';
 import '../../core/haptics.dart';
@@ -351,7 +352,11 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final boardPixels = constraints.maxWidth * 0.92;
+        // The parent (GameScreen) already applies the responsive margin and
+        // size cap, so here we simply fill the square box we are given. Using
+        // the smaller side keeps the board square and in sync with the overlay
+        // cellSize computed by GameScreen (no more double-shrink mismatch).
+        final boardPixels = math.min(constraints.maxWidth, constraints.maxHeight);
         final currentCellSize = boardPixels / 6;
         _cellSize = currentCellSize;
 

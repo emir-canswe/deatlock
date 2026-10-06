@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/haptics.dart';
 import '../../core/palette.dart';
@@ -10,8 +11,22 @@ import 'game_screen.dart';
 import 'levels_screen.dart';
 import 'settings_screen.dart';
 
-/// Premium main menu / mode select screen for DEADLOCK.
-class ModeSelectScreen extends StatelessWidget {
+/// Per-mode accent color pair (gradient start, gradient end).
+(Color, Color) _modeGradient(GameMode mode) {
+  switch (mode) {
+    case GameMode.levels:
+      return (const Color(0xFFF7B733), const Color(0xFFE08C1E));
+    case GameMode.daily:
+      return (const Color(0xFF38BDF8), const Color(0xFF2563EB));
+    case GameMode.sprint:
+      return (const Color(0xFFFF7A45), const Color(0xFFE63946));
+    case GameMode.zen:
+      return (const Color(0xFF34D399), const Color(0xFF059669));
+  }
+}
+
+/// Premium animated main menu / mode select screen for DEADLOCK.
+class ModeSelectScreen extends StatefulWidget {
   final ProgressController progressController;
 
   const ModeSelectScreen({
@@ -20,188 +35,374 @@ class ModeSelectScreen extends StatelessWidget {
   });
 
   @override
+  State<ModeSelectScreen> createState() => _ModeSelectScreenState();
+}
+
+class _ModeSelectScreenState extends State<ModeSelectScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _ambient;
+  late final AnimationController _entrance;
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ambient = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 16),
+    )..repeat();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    )..repeat(reverse: true);
+    _entrance = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 950),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _ambient.dispose();
+    _pulse.dispose();
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  /// Staggered entrance: fade + slide-up based on [index].
+  Widget _reveal(int index, Widget child) {
+    final start = (index * 0.075).clamp(0.0, 0.55);
+    final anim = CurvedAnimation(
+      parent: _entrance,
+      curve: Interval(start, (start + 0.5).clamp(0.0, 1.0),
+          curve: Curves.easeOutCubic),
+    );
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, c) => Opacity(
+        opacity: anim.value.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - anim.value) * 22),
+          child: c,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  void _navigateToGame(GameMode mode, {int? levelNumber}) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GameScreen(
+        mode: mode,
+        progressController: widget.progressController,
+        levelNumber: levelNumber,
+      ),
+    ));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pc = widget.progressController;
     return ListenableBuilder(
-      listenable: progressController,
+      listenable: pc,
       builder: (context, _) {
-        final activeMode = progressController.activeMode;
-        final unlockedLevel = progressController.unlockedLevel;
-        final streak = progressController.dailyStore.streak;
-        final hasPlayedDaily = progressController.dailyStore.hasPlayedToday;
+        final activeMode = pc.activeMode;
+        final unlockedLevel = pc.unlockedLevel;
+        final streak = pc.dailyStore.streak;
+        final hasPlayedDaily = pc.dailyStore.hasPlayedToday;
         final s = S.of(context);
         final dailyText = hasPlayedDaily
             ? (streak > 0 ? s.dailyStreak(streak) : s.dailySolved)
             : s.dailyReady;
-        final sprintBest = progressController.sprintBest;
+        final sprintBest = pc.sprintBest;
 
         return Scaffold(
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Palette.bgStart, Palette.bgEnd],
-              ),
-            ),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── Top Bar ──────────────────────────────────────────
-                      _TopBar(progressController: progressController),
-
-                      const SizedBox(height: 24),
-
-                      // ── Hero Brand Section ────────────────────────────────
-                      _HeroBrandSection(
-                        unlockedLevel: unlockedLevel,
-                        totalStars: progressController.totalStars,
-                        s: s,
-                      ),
-
-                      const SizedBox(height: 22),
-
-                      // ── Big Play Button ───────────────────────────────────
-                      _BigPlayButton(
-                        s: s,
-                        activeMode: activeMode,
-                        unlockedLevel: unlockedLevel,
-                        progressController: progressController,
-                        onPressed: () {
-                          Haptics.mediumImpact();
-                          if (activeMode == GameMode.levels) {
-                            Navigator.of(context).push(MaterialPageRoute(
-                              builder: (_) => GameScreen(
-                                mode: GameMode.levels,
-                                progressController: progressController,
-                                levelNumber: unlockedLevel,
-                              ),
-                            ));
-                          } else {
-                            _navigateToGame(context, activeMode, progressController);
-                          }
-                        },
-                      ),
-
-                      const SizedBox(height: 28),
-
-                      // ── Mode Grid ─────────────────────────────────────────
-                      _SectionHeader(label: s.gameModes),
-                      const SizedBox(height: 12),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ModeCard(
-                              title: s.modeLevels,
-                              subtitle: s.levelSubtitle(unlockedLevel),
-                              tag: 'Bölüm $unlockedLevel',
-                              emoji: '🏆',
-                              mode: GameMode.levels,
-                              isSelected: activeMode == GameMode.levels,
-                              onTap: () {
-                                Haptics.selectionClick();
-                                progressController.changeMode(GameMode.levels);
-                                Navigator.of(context).push(MaterialPageRoute(
-                                  builder: (_) => LevelsScreen(progressController: progressController),
-                                ));
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _ModeCard(
-                              title: s.modeDaily,
-                              subtitle: dailyText,
-                              tag: hasPlayedDaily ? (s.isTr ? '✓ Bitti' : '✓ Done') : (s.isTr ? 'Yeni' : 'New'),
-                              emoji: '📅',
-                              mode: GameMode.daily,
-                              isSelected: activeMode == GameMode.daily,
-                              onTap: () {
-                                Haptics.selectionClick();
-                                progressController.changeMode(GameMode.daily);
-                                _navigateToGame(context, GameMode.daily, progressController);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ModeCard(
-                              title: s.modeSprint,
-                              subtitle: s.sprintBestSub(sprintBest),
-                              tag: '60 Sn',
-                              emoji: '⚡',
-                              mode: GameMode.sprint,
-                              isSelected: activeMode == GameMode.sprint,
-                              onTap: () {
-                                Haptics.selectionClick();
-                                progressController.changeMode(GameMode.sprint);
-                                _navigateToGame(context, GameMode.sprint, progressController);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _ModeCard(
-                              title: s.modeZen,
-                              subtitle: s.modeZenSub,
-                              tag: s.isTr ? 'Sonsuz' : 'Endless',
-                              emoji: '🍃',
-                              mode: GameMode.zen,
-                              isSelected: activeMode == GameMode.zen,
-                              onTap: () {
-                                Haptics.selectionClick();
-                                progressController.changeMode(GameMode.zen);
-                                _navigateToGame(context, GameMode.zen, progressController);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 28),
-
-                      // ── Daily Mission Card ────────────────────────────────
-                      _SectionHeader(label: s.dailyMission),
-                      const SizedBox(height: 12),
-                      _DailyMissionCard(hasPlayedDaily: hasPlayedDaily, streak: streak, s: s,
-                        onTap: () {
-                          Haptics.selectionClick();
-                          progressController.changeMode(GameMode.daily);
-                          _navigateToGame(context, GameMode.daily, progressController);
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-                    ],
+          body: Stack(
+            children: [
+              // ── Ambient animated background ──────────────────────────
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Palette.bgStart, Palette.bgEnd],
+                    ),
                   ),
                 ),
               ),
-            ),
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: _ambient,
+                    builder: (context, _) => CustomPaint(
+                      painter: _AmbientPainter(_ambient.value, Palette.isDark),
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Foreground content ───────────────────────────────────
+              SafeArea(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _reveal(0, _TopBar(progressController: pc)),
+                        const SizedBox(height: 18),
+
+                        // ── Hero: emblem + wordmark + stat chips ───────
+                        _reveal(
+                          1,
+                          _Hero(
+                            unlockedLevel: unlockedLevel,
+                            totalStars: pc.totalStars,
+                            streak: streak,
+                            pulse: _pulse,
+                            s: s,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+
+                        // ── Big Play button ────────────────────────────
+                        _reveal(
+                          2,
+                          _BigPlayButton(
+                            s: s,
+                            activeMode: activeMode,
+                            unlockedLevel: unlockedLevel,
+                            pulse: _pulse,
+                            onPressed: () {
+                              Haptics.mediumImpact();
+                              if (activeMode == GameMode.levels) {
+                                _navigateToGame(GameMode.levels,
+                                    levelNumber: unlockedLevel);
+                              } else {
+                                _navigateToGame(activeMode);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 26),
+
+                        _reveal(3, _SectionHeader(label: s.gameModes)),
+                        const SizedBox(height: 14),
+
+                        // ── Mode grid ──────────────────────────────────
+                        _reveal(
+                          4,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _ModeCard(
+                                  title: s.modeLevels,
+                                  subtitle: s.levelSubtitle(unlockedLevel),
+                                  tag: '${s.isTr ? 'Bölüm' : 'Level'} $unlockedLevel',
+                                  emoji: '🏆',
+                                  mode: GameMode.levels,
+                                  isSelected: activeMode == GameMode.levels,
+                                  progress: (unlockedLevel / 500).clamp(0.0, 1.0),
+                                  onTap: () {
+                                    Haptics.selectionClick();
+                                    pc.changeMode(GameMode.levels);
+                                    Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (_) => LevelsScreen(
+                                          progressController: pc),
+                                    ));
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _ModeCard(
+                                  title: s.modeDaily,
+                                  subtitle: dailyText,
+                                  tag: hasPlayedDaily
+                                      ? (s.isTr ? '✓ Bitti' : '✓ Done')
+                                      : (s.isTr ? 'Yeni' : 'New'),
+                                  emoji: '📅',
+                                  mode: GameMode.daily,
+                                  isSelected: activeMode == GameMode.daily,
+                                  onTap: () {
+                                    Haptics.selectionClick();
+                                    pc.changeMode(GameMode.daily);
+                                    _navigateToGame(GameMode.daily);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _reveal(
+                          5,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _ModeCard(
+                                  title: s.modeSprint,
+                                  subtitle: s.sprintBestSub(sprintBest),
+                                  tag: '60 Sn',
+                                  emoji: '⚡',
+                                  mode: GameMode.sprint,
+                                  isSelected: activeMode == GameMode.sprint,
+                                  onTap: () {
+                                    Haptics.selectionClick();
+                                    pc.changeMode(GameMode.sprint);
+                                    _navigateToGame(GameMode.sprint);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _ModeCard(
+                                  title: s.modeZen,
+                                  subtitle: s.modeZenSub,
+                                  tag: s.isTr ? 'Sonsuz' : 'Endless',
+                                  emoji: '🍃',
+                                  mode: GameMode.zen,
+                                  isSelected: activeMode == GameMode.zen,
+                                  onTap: () {
+                                    Haptics.selectionClick();
+                                    pc.changeMode(GameMode.zen);
+                                    _navigateToGame(GameMode.zen);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 26),
+
+                        _reveal(6, _SectionHeader(label: s.dailyMission)),
+                        const SizedBox(height: 14),
+                        _reveal(
+                          7,
+                          _DailyMissionCard(
+                            hasPlayedDaily: hasPlayedDaily,
+                            streak: streak,
+                            s: s,
+                            onTap: () {
+                              Haptics.selectionClick();
+                              pc.changeMode(GameMode.daily);
+                              _navigateToGame(GameMode.daily);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
-
-  static void _navigateToGame(BuildContext context, GameMode mode, ProgressController pc) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => GameScreen(mode: mode, progressController: pc),
-    ));
-  }
 }
 
-// ──────────────────────────────────────────────────────────
-// Top Bar: HUD pills on left, settings on right
-// ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// Ambient background painter — drifting puzzle blocks + soft glows.
+// ══════════════════════════════════════════════════════════════════════
+class _AmbientPainter extends CustomPainter {
+  final double t; // 0..1 looping
+  final bool isDark;
+  const _AmbientPainter(this.t, this.isDark);
+
+  // (xFrac, yFrac, wFrac, hFrac, colorIndex, driftAmp, speed, phase)
+  static const List<List<double>> _blocks = [
+    [0.07, 0.20, 0.17, 0.065, 0, 18, 0.7, 0.0],
+    [0.82, 0.12, 0.085, 0.13, 1, 22, 0.9, 1.4],
+    [0.86, 0.45, 0.085, 0.085, 2, 16, 1.1, 2.7],
+    [0.05, 0.58, 0.10, 0.10, 3, 20, 0.8, 0.6],
+    [0.60, 0.74, 0.19, 0.07, 4, 24, 0.6, 3.5],
+    [0.28, 0.88, 0.10, 0.10, 1, 18, 1.0, 2.0],
+    [0.88, 0.82, 0.075, 0.075, 0, 15, 1.2, 4.2],
+  ];
+
+  static const List<Color> _dark = [
+    Color(0xFF38BDF8),
+    Color(0xFF818CF8),
+    Color(0xFF34D399),
+    Color(0xFFF59E0B),
+    Color(0xFFEC4899),
+  ];
+  static const List<Color> _light = [
+    Color(0xFF7AC2F0),
+    Color(0xFFA9A9EC),
+    Color(0xFF6FD3AE),
+    Color(0xFFF2C06B),
+    Color(0xFFEFA8C6),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cols = isDark ? _dark : _light;
+    final blockAlpha = isDark ? 0.13 : 0.16;
+
+    // Two large soft glow orbs for depth.
+    final glow1 = Paint()
+      ..color = (isDark ? const Color(0xFF1D9E75) : const Color(0xFF1D9E75))
+          .withValues(alpha: isDark ? 0.14 : 0.10)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 90);
+    final glow2 = Paint()
+      ..color = (isDark ? const Color(0xFF6366F1) : const Color(0xFF38BDF8))
+          .withValues(alpha: isDark ? 0.12 : 0.09)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 100);
+    final a = t * 2 * math.pi;
+    canvas.drawCircle(
+      Offset(size.width * 0.18 + math.cos(a) * 20,
+          size.height * 0.16 + math.sin(a) * 16),
+      size.width * 0.34,
+      glow1,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.86 + math.cos(a + 2) * 22,
+          size.height * 0.30 + math.sin(a + 2) * 18),
+      size.width * 0.30,
+      glow2,
+    );
+
+    for (final b in _blocks) {
+      final x = b[0] * size.width;
+      final baseY = b[1] * size.height;
+      final w = b[2] * size.width;
+      final h = b[3] * size.width; // square-ish unit based on width
+      final color = cols[b[4].toInt()];
+      final amp = b[5];
+      final speed = b[6];
+      final phase = b[7];
+      final dy = math.sin(a * speed + phase) * amp;
+      final dx = math.cos(a * speed * 0.6 + phase) * (amp * 0.4);
+
+      final rect = Rect.fromLTWH(x + dx, baseY + dy, w, h);
+      final rrect =
+          RRect.fromRectAndRadius(rect, Radius.circular(h.clamp(8, 20) * 0.45));
+      final fill = Paint()
+        ..color = color.withValues(alpha: blockAlpha)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+      canvas.drawRRect(rrect, fill);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AmbientPainter old) =>
+      old.t != t || old.isDark != isDark;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Top Bar
+// ══════════════════════════════════════════════════════════════════════
 class _TopBar extends StatelessWidget {
   final ProgressController progressController;
   const _TopBar({required this.progressController});
@@ -211,7 +412,6 @@ class _TopBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // HUD pills
         Row(
           children: [
             _HudPill(
@@ -224,13 +424,15 @@ class _TopBar extends StatelessWidget {
             _HudPill(
               icon: '💡',
               value: '${progressController.hints}',
-              borderColor: Palette.isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-              shadowColor: Palette.isDark ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1),
+              borderColor: Palette.isDark
+                  ? const Color(0xFF334155)
+                  : const Color(0xFFCBD5E1),
+              shadowColor: Palette.isDark
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFFCBD5E1),
             ),
           ],
         ),
-
-        // Settings Button
         ChunkyButton(
           color: Palette.buttonWhiteBg,
           shadowColor: Palette.buttonWhiteShadow,
@@ -241,7 +443,8 @@ class _TopBar extends StatelessWidget {
           onPressed: () {
             Haptics.selectionClick();
             Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SettingsScreen(progressController: progressController),
+              builder: (_) =>
+                  SettingsScreen(progressController: progressController),
             ));
           },
           child: Icon(Icons.settings_rounded, color: Palette.textHigh, size: 22),
@@ -299,17 +502,21 @@ class _HudPill extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-// Hero Brand Section
-// ──────────────────────────────────────────────────────────
-class _HeroBrandSection extends StatelessWidget {
+// ══════════════════════════════════════════════════════════════════════
+// Hero: board emblem + animated wordmark + stat chips
+// ══════════════════════════════════════════════════════════════════════
+class _Hero extends StatelessWidget {
   final int unlockedLevel;
   final int totalStars;
+  final int streak;
+  final Animation<double> pulse;
   final S s;
 
-  const _HeroBrandSection({
+  const _Hero({
     required this.unlockedLevel,
     required this.totalStars,
+    required this.streak,
+    required this.pulse,
     required this.s,
   });
 
@@ -317,132 +524,94 @@ class _HeroBrandSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Logo badge container
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: BoxDecoration(
-            color: Palette.cardBg,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Palette.isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Palette.shadowColor,
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // DEADLOCK wordmark
-              ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  colors: Palette.isDark
-                      ? [const Color(0xFF38BDF8), const Color(0xFF818CF8)]
-                      : [const Color(0xFF0C447C), const Color(0xFF1D9E75)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ).createShader(bounds),
-                child: Text(
-                  'DEADLOCK',
-                  style: ThemeConfig.headingStyle.copyWith(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 2.5,
-                    height: 1.0,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                s.isTr ? 'BULMACA & STRATEJİ OYUNU' : 'PUZZLE & STRATEGY GAME',
-                style: TextStyle(
-                  fontFamily: 'Nunito',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: Palette.textLow,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const SizedBox(height: 14),
-              // Stats row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _StatBadge(
-                    icon: '🏆',
-                    label: s.isTr ? 'Bölüm' : 'Level',
-                    value: '$unlockedLevel',
-                    color: Palette.coinGold,
-                  ),
-                  Container(
-                    width: 1,
-                    height: 28,
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    color: Palette.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                  ),
-                  _StatBadge(
-                    icon: '⭐',
-                    label: s.isTr ? 'Yıldız' : 'Stars',
-                    value: '$totalStars',
-                    color: Palette.coinGold,
+        // Board emblem with pulsing glow halo
+        AnimatedBuilder(
+          animation: pulse,
+          builder: (context, child) {
+            final g = Curves.easeInOut.transform(pulse.value);
+            return Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Palette.targetEnd.withValues(alpha: 0.18 + g * 0.18),
+                    blurRadius: 24 + g * 16,
+                    spreadRadius: 1 + g * 3,
                   ),
                 ],
               ),
-            ],
+              child: child,
+            );
+          },
+          child: const _BoardEmblem(size: 96),
+        ),
+        const SizedBox(height: 16),
+
+        // DEADLOCK wordmark with gradient
+        ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            colors: Palette.isDark
+                ? [
+                    const Color(0xFF7DD3FC),
+                    const Color(0xFF818CF8),
+                    const Color(0xFF34D399),
+                  ]
+                : [
+                    const Color(0xFF0C447C),
+                    const Color(0xFF2563EB),
+                    const Color(0xFF1D9E75),
+                  ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(bounds),
+          child: Text(
+            'DEADLOCK',
+            textAlign: TextAlign.center,
+            style: ThemeConfig.headingStyle.copyWith(
+              fontSize: 42,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 3.0,
+              height: 1.0,
+            ),
           ),
         ),
-      ],
-    );
-  }
-}
+        const SizedBox(height: 6),
+        Text(
+          s.isTr ? 'BULMACA & STRATEJİ' : 'PUZZLE & STRATEGY',
+          style: TextStyle(
+            fontFamily: 'Nunito',
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            color: Palette.textLow,
+            letterSpacing: 3.0,
+          ),
+        ),
+        const SizedBox(height: 16),
 
-class _StatBadge extends StatelessWidget {
-  final String icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  const _StatBadge({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(icon, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // Stat chips row
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontFamily: 'Nunito',
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: Palette.textHigh,
-                height: 1.0,
-              ),
+            _StatChip(
+              emoji: '🏆',
+              value: '$unlockedLevel',
+              label: s.isTr ? 'Bölüm' : 'Level',
+              accent: Palette.coinGold,
             ),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontFamily: 'Nunito',
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: Palette.textLow,
-                letterSpacing: 0.8,
-              ),
+            const SizedBox(width: 10),
+            _StatChip(
+              emoji: '⭐',
+              value: '$totalStars',
+              label: s.isTr ? 'Yıldız' : 'Stars',
+              accent: Palette.coinGold,
+            ),
+            const SizedBox(width: 10),
+            _StatChip(
+              emoji: '🔥',
+              value: '$streak',
+              label: s.isTr ? 'Seri' : 'Streak',
+              accent: const Color(0xFFF97316),
             ),
           ],
         ),
@@ -451,72 +620,265 @@ class _StatBadge extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-// Big Play Button
-// ──────────────────────────────────────────────────────────
-class _BigPlayButton extends StatelessWidget {
+class _StatChip extends StatelessWidget {
+  final String emoji;
+  final String value;
+  final String label;
+  final Color accent;
+
+  const _StatChip({
+    required this.emoji,
+    required this.value,
+    required this.label,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Palette.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.cardShadow,
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 15)),
+          const SizedBox(width: 7),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: Palette.textHigh,
+                  height: 1.0,
+                ),
+              ),
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: Palette.textLow,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small stylized sliding-block board used as the brand emblem.
+class _BoardEmblem extends StatelessWidget {
+  final double size;
+  const _BoardEmblem({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _BoardEmblemPainter(Palette.isDark)),
+    );
+  }
+}
+
+class _BoardEmblemPainter extends CustomPainter {
+  final bool isDark;
+  const _BoardEmblemPainter(this.isDark);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(size.width * 0.26),
+    );
+
+    // Board frame
+    final frame = Paint()
+      ..color = isDark ? const Color(0xFF1E293B) : const Color(0xFF0C447C);
+    canvas.drawRRect(r, frame);
+
+    final innerPad = size.width * 0.12;
+    final inner = Rect.fromLTWH(
+      innerPad,
+      innerPad,
+      size.width - innerPad * 2,
+      size.height - innerPad * 2,
+    );
+    final innerR =
+        RRect.fromRectAndRadius(inner, Radius.circular(size.width * 0.16));
+    final board = Paint()
+      ..color = isDark ? const Color(0xFF0B111E) : const Color(0xFFF1F6FC);
+    canvas.drawRRect(innerR, board);
+
+    // 4x4 grid of pockets
+    const n = 4;
+    final cell = inner.width / n;
+    final gap = cell * 0.14;
+    final pocket = Paint()
+      ..color = isDark ? const Color(0xFF131D31) : const Color(0xFFE2EBF5);
+    for (int row = 0; row < n; row++) {
+      for (int col = 0; col < n; col++) {
+        final cr = Rect.fromLTWH(
+          inner.left + col * cell + gap,
+          inner.top + row * cell + gap,
+          cell - gap * 2,
+          cell - gap * 2,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(cr, Radius.circular(cell * 0.18)),
+          pocket,
+        );
+      }
+    }
+
+    void drawBlock(int col, int row, int w, int h, Color a, Color b) {
+      final rect = Rect.fromLTWH(
+        inner.left + col * cell + gap,
+        inner.top + row * cell + gap,
+        cell * w - gap * 2,
+        cell * h - gap * 2,
+      );
+      final rr = RRect.fromRectAndRadius(rect, Radius.circular(cell * 0.22));
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..shader = LinearGradient(
+            colors: [a, b],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(rect),
+      );
+    }
+
+    // Decorative blocks
+    drawBlock(0, 0, 1, 2, const Color(0xFFAFA9EC), const Color(0xFF6D63D6)); // purple vertical
+    drawBlock(3, 1, 1, 2, const Color(0xFF5DCAA5), const Color(0xFF189E78)); // teal vertical
+    // Red target (row 2, 2-wide) heading to the exit on the right
+    drawBlock(0, 2, 2, 1, Palette.targetStart, Palette.targetEnd);
+
+    // Exit glow notch on the right edge of the target row
+    final notchY = inner.top + 2 * cell + cell * 0.5;
+    final notch = Paint()
+      ..color = (isDark ? const Color(0xFF34D399) : const Color(0xFF19BFA0))
+          .withValues(alpha: 0.9)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawCircle(Offset(size.width - innerPad * 0.5, notchY),
+        size.width * 0.045, notch);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BoardEmblemPainter old) =>
+      old.isDark != isDark;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Big Play Button with pulsing glow ring
+// ══════════════════════════════════════════════════════════════════════
+class _BigPlayButton extends StatefulWidget {
   final S s;
   final GameMode activeMode;
   final int unlockedLevel;
-  final ProgressController progressController;
+  final Animation<double> pulse;
   final VoidCallback onPressed;
 
   const _BigPlayButton({
     required this.s,
     required this.activeMode,
     required this.unlockedLevel,
-    required this.progressController,
+    required this.pulse,
     required this.onPressed,
   });
 
   @override
+  State<_BigPlayButton> createState() => _BigPlayButtonState();
+}
+
+class _BigPlayButtonState extends State<_BigPlayButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final modeLabel = activeMode == GameMode.levels
-        ? s.levelTitle(unlockedLevel).toUpperCase()
-        : activeMode == GameMode.daily
+    final s = widget.s;
+    final modeLabel = widget.activeMode == GameMode.levels
+        ? s.levelTitle(widget.unlockedLevel).toUpperCase()
+        : widget.activeMode == GameMode.daily
             ? s.dailyTitle
-            : activeMode == GameMode.sprint
+            : widget.activeMode == GameMode.sprint
                 ? s.sprintTitle
                 : s.zenTitle;
 
     return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        height: 76,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Palette.primary, Color(0xFF0F7A5C)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Palette.primaryDark.withValues(alpha: 0.55),
-              blurRadius: 0,
-              offset: const Offset(0, 5),
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTap: widget.onPressed,
+      child: AnimatedBuilder(
+        animation: widget.pulse,
+        builder: (context, child) {
+          final g = Curves.easeInOut.transform(widget.pulse.value);
+          return AnimatedScale(
+            scale: _pressed ? 0.97 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            child: Container(
+              height: 80,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF22B885), Palette.primary, Color(0xFF0F7A5C)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(26),
+                boxShadow: [
+                  BoxShadow(
+                    color: Palette.primaryDark.withValues(alpha: 0.5),
+                    blurRadius: 0,
+                    offset: const Offset(0, 5),
+                  ),
+                  BoxShadow(
+                    color: Palette.primary.withValues(alpha: 0.25 + g * 0.22),
+                    blurRadius: 20 + g * 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: child,
             ),
-            BoxShadow(
-              color: Palette.primary.withValues(alpha: 0.3),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
+          );
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22),
           child: Row(
             children: [
-              // Left: Mode info + Play label
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -530,12 +892,12 @@ class _BigPlayButton extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 6),
                     Text(
                       s.play,
                       style: const TextStyle(
                         fontFamily: 'Nunito',
-                        fontSize: 26,
+                        fontSize: 28,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: 0.5,
@@ -545,23 +907,21 @@ class _BigPlayButton extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // Right: Glowing play icon circle
               Container(
-                width: 52,
-                height: 52,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.35),
+                    color: Colors.white.withValues(alpha: 0.4),
                     width: 1.5,
                   ),
                 ),
                 child: const Icon(
                   Icons.play_arrow_rounded,
                   color: Colors.white,
-                  size: 34,
+                  size: 36,
                 ),
               ),
             ],
@@ -572,9 +932,9 @@ class _BigPlayButton extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-// Section Header with divider line
-// ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// Section Header
+// ══════════════════════════════════════════════════════════════════════
 class _SectionHeader extends StatelessWidget {
   final String label;
   const _SectionHeader({required this.label});
@@ -583,13 +943,26 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        Container(
+          width: 4,
+          height: 15,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Palette.primary, Color(0xFF0F7A5C)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
         Text(
           label,
           style: TextStyle(
             fontFamily: 'Nunito',
             fontSize: 12,
             fontWeight: FontWeight.w900,
-            color: Palette.textLow,
+            color: Palette.textHigh,
             letterSpacing: 1.0,
           ),
         ),
@@ -597,7 +970,9 @@ class _SectionHeader extends StatelessWidget {
         Expanded(
           child: Container(
             height: 1,
-            color: Palette.isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            color: Palette.isDark
+                ? const Color(0xFF1E293B)
+                : const Color(0xFFE2E8F0),
           ),
         ),
       ],
@@ -605,16 +980,17 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────
-// Mode Card
-// ──────────────────────────────────────────────────────────
-class _ModeCard extends StatelessWidget {
+// ══════════════════════════════════════════════════════════════════════
+// Mode Card — gradient badge, press animation, optional progress bar
+// ══════════════════════════════════════════════════════════════════════
+class _ModeCard extends StatefulWidget {
   final String title;
   final String subtitle;
   final String tag;
   final String emoji;
   final GameMode mode;
   final bool isSelected;
+  final double? progress;
   final VoidCallback onTap;
 
   const _ModeCard({
@@ -625,132 +1001,153 @@ class _ModeCard extends StatelessWidget {
     required this.mode,
     required this.isSelected,
     required this.onTap,
+    this.progress,
   });
 
-  Color get _modeAccent {
-    switch (mode) {
-      case GameMode.levels:
-        return Palette.coinGold;
-      case GameMode.daily:
-        return const Color(0xFF0EA5E9);
-      case GameMode.sprint:
-        return Palette.targetEnd;
-      case GameMode.zen:
-        return const Color(0xFF10B981);
-    }
-  }
+  @override
+  State<_ModeCard> createState() => _ModeCardState();
+}
+
+class _ModeCardState extends State<_ModeCard> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        height: 138,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Palette.cardBg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? _modeAccent : Palette.cardBorder,
-            width: isSelected ? 2.2 : 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isSelected
-                  ? _modeAccent.withValues(alpha: 0.22)
-                  : Palette.cardShadow,
-              blurRadius: isSelected ? 12 : 5,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Top: emoji box + tag
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Emoji box with accent background
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? _modeAccent.withValues(alpha: 0.14)
-                        : (Palette.isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
-                    borderRadius: BorderRadius.circular(12),
-                    border: isSelected
-                        ? Border.all(color: _modeAccent.withValues(alpha: 0.35), width: 1.2)
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
-                ),
+    final (accentStart, accentEnd) = _modeGradient(widget.mode);
+    final selected = widget.isSelected;
 
-                // Tag chip
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? _modeAccent.withValues(alpha: 0.14)
-                        : (Palette.isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
-                    borderRadius: BorderRadius.circular(8),
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          height: 150,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Palette.cardBg,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected ? accentStart : Palette.cardBorder,
+              width: selected ? 2.2 : 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: selected
+                    ? accentStart.withValues(alpha: 0.25)
+                    : Palette.cardShadow,
+                blurRadius: selected ? 16 : 6,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Gradient emoji badge
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [accentStart, accentEnd],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentStart.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(widget.emoji,
+                        style: const TextStyle(fontSize: 22)),
                   ),
-                  child: Text(
-                    tag,
-                    style: TextStyle(
-                      fontFamily: 'Nunito',
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: isSelected ? _modeAccent : Palette.textLow,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: accentStart.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      widget.tag,
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: accentEnd,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-
-            // Bottom: title + subtitle
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ThemeConfig.titleStyle.copyWith(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w900,
-                    color: Palette.textHigh,
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ThemeConfig.titleStyle.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: Palette.textHigh,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ThemeConfig.bodyStyle.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? _modeAccent : Palette.textLow,
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ThemeConfig.bodyStyle.copyWith(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? accentEnd : Palette.textLow,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  if (widget.progress != null) ...[
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: widget.progress,
+                        minHeight: 5,
+                        backgroundColor: Palette.isDark
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFFE2E8F0),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(accentStart),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
 // Daily Mission Card
-// ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
 class _DailyMissionCard extends StatelessWidget {
   final bool hasPlayedDaily;
   final int streak;
@@ -780,9 +1177,7 @@ class _DailyMissionCard extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: hasPlayedDaily
-                ? (Palette.isDark ? const Color(0xFF10B981) : const Color(0xFF10B981))
-                : Palette.coinGold,
+            color: hasPlayedDaily ? const Color(0xFF10B981) : Palette.coinGold,
             width: 1.6,
           ),
           boxShadow: [
@@ -797,7 +1192,6 @@ class _DailyMissionCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Left: Icon circle
             Container(
               width: 52,
               height: 52,
@@ -820,10 +1214,7 @@ class _DailyMissionCard extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(width: 14),
-
-            // Middle: text
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -843,24 +1234,26 @@ class _DailyMissionCard extends StatelessWidget {
                         ? (streak > 0
                             ? s.dailyStreak(streak)
                             : (s.isTr ? 'Bugün tamamlandı!' : 'Completed today!'))
-                        : (s.isTr ? 'Günlük bulmaca seni bekliyor' : 'Daily puzzle awaits'),
+                        : (s.isTr
+                            ? 'Günlük bulmaca seni bekliyor'
+                            : 'Daily puzzle awaits'),
                     style: TextStyle(
                       fontFamily: 'Nunito',
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      color: hasPlayedDaily
-                          ? const Color(0xFF10B981)
-                          : Palette.textLow,
+                      color:
+                          hasPlayedDaily ? const Color(0xFF10B981) : Palette.textLow,
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // Progress bar
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
                       value: hasPlayedDaily ? 1.0 : 0.0,
                       minHeight: 7,
-                      backgroundColor: Palette.isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                      backgroundColor: Palette.isDark
+                          ? const Color(0xFF0F172A)
+                          : const Color(0xFFE2E8F0),
                       valueColor: AlwaysStoppedAnimation<Color>(
                         hasPlayedDaily ? const Color(0xFF10B981) : Palette.coinGold,
                       ),
@@ -869,14 +1262,12 @@ class _DailyMissionCard extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(width: 12),
-
-            // Right: reward badge or check
             Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                   decoration: BoxDecoration(
                     color: hasPlayedDaily
                         ? const Color(0xFF10B981).withValues(alpha: 0.14)
@@ -895,7 +1286,8 @@ class _DailyMissionCard extends StatelessWidget {
                       fontFamily: 'Nunito',
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
-                      color: hasPlayedDaily ? const Color(0xFF10B981) : Palette.coinGold,
+                      color:
+                          hasPlayedDaily ? const Color(0xFF10B981) : Palette.coinGold,
                     ),
                   ),
                 ),

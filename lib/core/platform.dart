@@ -1,54 +1,25 @@
 import 'package:flutter/foundation.dart';
-import 'dart:js' as js;
+
+// Delegates to a platform-specific implementation chosen at compile time.
+// Native builds get `platform_io.dart` (no web libraries); web builds get
+// `platform_web.dart` (modern `dart:js_interop`). This keeps web-only
+// libraries out of the native (Android/iOS) compilation.
+import 'platform_io.dart' if (dart.library.js_interop) 'platform_web.dart';
 
 /// Platform utility helper to check Web/PWA specific features.
 class PlatformUtils {
-  static bool get isWeb => kIsWeb;
+  static bool get isWeb => PlatformUtilsImpl.isWeb;
 
-  /// Checks if the JS Navigator Share API is available (Web PWA)
-  static bool get hasShareAPI {
-    if (!isWeb) return true; // Mobile has native share
-    try {
-      return js.context.callMethod('isShareSupported') as bool;
-    } catch (_) {
-      return false;
-    }
-  }
+  /// Checks if the JS Navigator Share API is available (Web PWA).
+  static bool get hasShareAPI => PlatformUtilsImpl.hasShareAPI;
 
-  /// Trigger sharing or fallback to copy
-  static void shareText(String text, {required VoidCallback onCopied}) {
-    if (isWeb) {
-      try {
-        final shared = js.context.callMethod('shareText', [text]) as bool;
-        if (!shared) {
-          onCopied();
-        }
-      } catch (_) {
-        onCopied();
-      }
-    } else {
-      // In native Android, we would typically use share_plus,
-      // but since we are minimizing packages, we can just copy to clipboard!
-      onCopied();
-    }
-  }
+  /// Trigger sharing or fallback to copy.
+  static void shareText(String text, {required VoidCallback onCopied}) =>
+      PlatformUtilsImpl.shareText(text, onCopied: onCopied);
 
-  /// Triggers PWA install prompt if captured
-  static void triggerPWAInstall() {
-    if (isWeb) {
-      try {
-        js.context.callMethod('triggerPwaInstall');
-      } catch (_) {}
-    }
-  }
+  /// Triggers PWA install prompt if captured.
+  static void triggerPWAInstall() => PlatformUtilsImpl.triggerPWAInstall();
 
-  /// Checks if PWA install prompt is available
-  static bool get canInstallPWA {
-    if (!isWeb) return false;
-    try {
-      return js.context.callMethod('canInstallPwa') as bool;
-    } catch (_) {
-      return false;
-    }
-  }
+  /// Checks if PWA install prompt is available.
+  static bool get canInstallPWA => PlatformUtilsImpl.canInstallPWA;
 }

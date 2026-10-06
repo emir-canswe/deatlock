@@ -159,7 +159,10 @@ class _LevelsScreenState extends State<LevelsScreen>
           ),
         ),
         child: SafeArea(
-          child: Column(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
             children: [
               // 1. Header Bar: Back Button, Title, and Star Counter Pill
               Padding(
@@ -396,6 +399,8 @@ class _LevelsScreenState extends State<LevelsScreen>
                 ),
               ),
             ],
+          ),
+            ),
           ),
         ),
       ),

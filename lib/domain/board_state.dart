@@ -21,6 +21,10 @@ extension BoardStateHelpers on BoardState {
       for (int k = 0; k < length; k++) {
         final r = isHoriz ? fixed : pos + k;
         final c = isHoriz ? pos + k : fixed;
+        // The target block can slide past the right edge to trigger the win
+        // (pos reaching 6/7); skip any cell that lies outside the 6x6 grid so
+        // it never writes into an unrelated row.
+        if (r < 0 || r >= 6 || c < 0 || c >= 6) continue;
         map[r * 6 + c] = i + 1;
       }
     }

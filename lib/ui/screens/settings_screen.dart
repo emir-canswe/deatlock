@@ -44,7 +44,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         child: SafeArea(
-          child: Column(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // 1. Header Bar: Back button + Title Capsule
@@ -360,6 +363,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ],
+          ),
+            ),
           ),
         ),
       ),

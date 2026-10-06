@@ -1,0 +1,13 @@
+# Copy this file to `android/key.properties` and fill in your own values.
+# Never commit the real key.properties or the .jks keystore to git.
+#
+# 1) Generate a release keystore (run once, keep the .jks file safe & backed up):
+#    keytool -genkey -v -keystore deadlock-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias deadlock
+#
+# 2) Point storeFile below at that .jks (absolute path, or relative to android/app).
+# 3) Build:  flutter build appbundle --release   (or:  flutter build apk --release)
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=deadlock
+storeFile=/absolute/path/to/deadlock-release.jks

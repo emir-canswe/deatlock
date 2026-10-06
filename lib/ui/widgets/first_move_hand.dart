@@ -59,7 +59,7 @@ class _FirstMoveHandState extends State<FirstMoveHand> with SingleTickerProvider
             opacity: _opacityAnimation.value,
             child: Icon(
               Icons.touch_app,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               size: 40,
               shadows: const [
                 Shadow(

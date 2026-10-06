@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/audio.dart';
 import '../../core/haptics.dart';
@@ -346,7 +347,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               ? const Center(child: CircularProgressIndicator(color: Palette.targetEnd))
               : Stack(
                   children: [
-                    Column(
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: Column(
                       children: [
                         // 1. Top HUD
                         TopBar(
@@ -381,10 +385,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             },
                           ),
 
-                        const Spacer(),
-
-                        // 3. Board Area
-                        IgnorePointer(
+                        // 3. Board Area — sized to fit BOTH width and height
+                        // (so it never overflows on tablets / short screens) and
+                        // capped so it stays comfortable on large displays.
+                        Expanded(
+                          child: IgnorePointer(
                           ignoring: _zenTransitioning,
                           child: AnimatedBuilder(
                             animation: _zenTransitionController,
@@ -401,7 +406,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             },
                             child: LayoutBuilder(
                               builder: (context, constraints) {
-                                final boardPixels = constraints.maxWidth * 0.92;
+                                final maxSide = math.min(
+                                  constraints.maxWidth,
+                                  constraints.maxHeight,
+                                );
+                                final boardPixels =
+                                    (maxSide * 0.92).clamp(0.0, 540.0);
                                 final cellSize = boardPixels / 6;
 
                                 return Center(
@@ -443,8 +453,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
-
-                        const Spacer(),
+                        ),
 
                         // Active Hint Action Card
                         if (_hintPieceIndex != null &&
@@ -471,6 +480,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             onReset: _onReset,
                           ),
                       ],
+                    ),
+                      ),
                     ),
 
                     // Win Celebration Overlay & Sheet
