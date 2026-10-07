@@ -579,40 +579,11 @@ class _Hero extends StatelessWidget {
               child: child,
             );
           },
-          child: const _BoardEmblem(size: 96),
+          // The logo already carries the name, so it is the hero on its own —
+          // a separate wordmark underneath would spell "REDBOUND" twice.
+          child: const _BoardEmblem(size: 132),
         ),
-        const SizedBox(height: 16),
-
-        // DEADLOCK wordmark with gradient
-        ShaderMask(
-          shaderCallback: (bounds) => LinearGradient(
-            colors: Palette.isDark
-                ? [
-                    const Color(0xFF7DD3FC),
-                    const Color(0xFF818CF8),
-                    const Color(0xFF34D399),
-                  ]
-                : [
-                    const Color(0xFF0C447C),
-                    const Color(0xFF2563EB),
-                    const Color(0xFF1D9E75),
-                  ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ).createShader(bounds),
-          child: Text(
-            'REDBOUND',
-            textAlign: TextAlign.center,
-            style: ThemeConfig.headingStyle.copyWith(
-              fontSize: 42,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 3.0,
-              height: 1.0,
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 14),
         Text(
           s.isTr ? 'BULMACA & STRATEJİ' : 'PUZZLE & STRATEGY',
           style: TextStyle(
@@ -722,109 +693,47 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-/// A small stylized sliding-block board used as the brand emblem.
+/// Brand emblem displaying the Redbound game logo.
 class _BoardEmblem extends StatelessWidget {
   final double size;
   const _BoardEmblem({required this.size});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final radius = BorderRadius.circular(size * 0.25);
+    return Container(
       width: size,
       height: size,
-      child: CustomPaint(painter: _BoardEmblemPainter(Palette.isDark)),
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        border: Border.all(
+          color: Palette.isDark
+              ? const Color(0xFF38BDF8).withValues(alpha: 0.45)
+              : const Color(0xFF0C447C).withValues(alpha: 0.35),
+          width: 2.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.25 - 1.5),
+        child: Image.asset(
+          'assets/icon/redbound_logo.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          // Decode at display resolution instead of the full source size.
+          cacheWidth: 384,
+          cacheHeight: 384,
+        ),
+      ),
     );
   }
-}
-
-class _BoardEmblemPainter extends CustomPainter {
-  final bool isDark;
-  const _BoardEmblemPainter(this.isDark);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(size.width * 0.26),
-    );
-
-    // Board frame
-    final frame = Paint()
-      ..color = isDark ? const Color(0xFF1E293B) : const Color(0xFF0C447C);
-    canvas.drawRRect(r, frame);
-
-    final innerPad = size.width * 0.12;
-    final inner = Rect.fromLTWH(
-      innerPad,
-      innerPad,
-      size.width - innerPad * 2,
-      size.height - innerPad * 2,
-    );
-    final innerR =
-        RRect.fromRectAndRadius(inner, Radius.circular(size.width * 0.16));
-    final board = Paint()
-      ..color = isDark ? const Color(0xFF0B111E) : const Color(0xFFF1F6FC);
-    canvas.drawRRect(innerR, board);
-
-    // 4x4 grid of pockets
-    const n = 4;
-    final cell = inner.width / n;
-    final gap = cell * 0.14;
-    final pocket = Paint()
-      ..color = isDark ? const Color(0xFF131D31) : const Color(0xFFE2EBF5);
-    for (int row = 0; row < n; row++) {
-      for (int col = 0; col < n; col++) {
-        final cr = Rect.fromLTWH(
-          inner.left + col * cell + gap,
-          inner.top + row * cell + gap,
-          cell - gap * 2,
-          cell - gap * 2,
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(cr, Radius.circular(cell * 0.18)),
-          pocket,
-        );
-      }
-    }
-
-    void drawBlock(int col, int row, int w, int h, Color a, Color b) {
-      final rect = Rect.fromLTWH(
-        inner.left + col * cell + gap,
-        inner.top + row * cell + gap,
-        cell * w - gap * 2,
-        cell * h - gap * 2,
-      );
-      final rr = RRect.fromRectAndRadius(rect, Radius.circular(cell * 0.22));
-      canvas.drawRRect(
-        rr,
-        Paint()
-          ..shader = LinearGradient(
-            colors: [a, b],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ).createShader(rect),
-      );
-    }
-
-    // Decorative blocks
-    drawBlock(0, 0, 1, 2, const Color(0xFFAFA9EC), const Color(0xFF6D63D6)); // purple vertical
-    drawBlock(3, 1, 1, 2, const Color(0xFF5DCAA5), const Color(0xFF189E78)); // teal vertical
-    // Red target (row 2, 2-wide) heading to the exit on the right
-    drawBlock(0, 2, 2, 1, Palette.targetStart, Palette.targetEnd);
-
-    // Exit glow notch on the right edge of the target row
-    final notchY = inner.top + 2 * cell + cell * 0.5;
-    final notch = Paint()
-      ..color = (isDark ? const Color(0xFF34D399) : const Color(0xFF19BFA0))
-          .withValues(alpha: 0.9)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    canvas.drawCircle(Offset(size.width - innerPad * 0.5, notchY),
-        size.width * 0.045, notch);
-  }
-
-  @override
-  bool shouldRepaint(covariant _BoardEmblemPainter old) =>
-      old.isDark != isDark;
 }
 
 // ══════════════════════════════════════════════════════════════════════
