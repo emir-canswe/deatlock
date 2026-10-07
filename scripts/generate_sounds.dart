@@ -105,31 +105,34 @@ void generateClick(File file) {
   writeWav16(file, s, sampleRate);
 }
 
-// ── Slide: clean warm wooden block tap (no noise) ───────────────────────────
-// A soft, rounded "bloop" with a slight downward pitch glide that suggests the
-// block settling into place. No hissy noise — pleasant on tiny phone speakers.
+// ── Slide: soft felt tick ───────────────────────────────────────────────────
+// Very short and unobtrusive: a damped air transient plus a quick muted tone.
+// Deliberately percussive and neutral rather than pitched — a melodic "bloop"
+// becomes tiring once it fires on every single move.
 void generateSlide(File file) {
   const sampleRate = 44100;
-  const duration = 0.12;
+  // The audible part decays within ~40ms; the buffer is padded with silence so
+  // Android's MediaPlayer reliably renders such a short effect.
+  const duration = 0.11;
   final n = (sampleRate * duration).toInt();
   final s = List<double>.filled(n, 0.0);
+  final rand = math.Random(5);
+  double lp = 0.0;
 
   for (int i = 0; i < n; i++) {
     final t = i / sampleRate;
 
-    // Pitch glides downward (≈450Hz → 270Hz) = the feel of motion settling.
-    final f = 270.0 + 180.0 * math.exp(-t / 0.035);
-    final tone = math.sin(2 * math.pi * f * t) +
-        0.35 * math.sin(2 * math.pi * f * 2.0 * t) * math.exp(-t / 0.030) +
-        0.12 * math.sin(2 * math.pi * f * 3.0 * t) * math.exp(-t / 0.014);
+    // Damped air transient gives the tactile "touch" of the piece moving.
+    lp += ((rand.nextDouble() * 2 - 1) - lp) * 0.25;
+    final air = lp * math.exp(-t / 0.0035) * 0.55;
 
-    // Soft tactile onset "pick" so it feels physical, not beepy.
-    final pick = math.sin(2 * math.pi * 900.0 * t) * math.exp(-t / 0.004) * 0.14;
+    // A short muted tone so it still reads as a physical object, not noise.
+    final tone = math.sin(2 * math.pi * 760.0 * t) * math.exp(-t / 0.012) * 0.6;
 
-    s[i] = (0.9 * tone + pick) * env(t, 0.004, 0.045);
+    s[i] = (air + tone) * env(t, 0.001, 0.016);
   }
 
-  applyEdgeFades(s, sampleRate, inMs: 1, outMs: 8);
+  applyEdgeFades(s, sampleRate, inMs: 1, outMs: 5);
   writeWav16(file, s, sampleRate);
 }
 
