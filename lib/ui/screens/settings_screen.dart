@@ -20,14 +20,240 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with SingleTickerProviderStateMixin {
   bool _hapticsEnabled = Haptics.enabled;
   bool _soundEnabled = false;
+
+  // One-shot entrance animation: it finishes and stops, so unlike a repeating
+  // ticker it costs nothing once the screen has settled.
+  late final AnimationController _entrance;
 
   @override
   void initState() {
     super.initState();
     _soundEnabled = widget.progressController.soundEnabled;
+    _entrance = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  /// Staggered fade + slide-up used to introduce each block.
+  Widget _reveal(int index, Widget child) {
+    final start = (index * 0.18).clamp(0.0, 0.55);
+    final anim = CurvedAnimation(
+      parent: _entrance,
+      curve: Interval(start, (start + 0.6).clamp(0.0, 1.0),
+          curve: Curves.easeOutCubic),
+    );
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, c) => Opacity(
+        opacity: anim.value.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - anim.value) * 18),
+          child: c,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  /// Which brightness a theme choice actually results in, so the live preview
+  /// stays truthful for the "system" option too.
+  bool _effectiveDark(String mode) {
+    if (mode == 'dark') return true;
+    if (mode == 'light') return false;
+    return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+        Brightness.dark;
+  }
+
+  Widget _buildHeader(S s) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ChunkyButton(
+                color: Palette.buttonWhiteBg,
+                shadowColor: Palette.buttonWhiteShadow,
+                borderRadius: 22,
+                width: 44,
+                height: 44,
+                depth: 3,
+                onPressed: () {
+                  Haptics.selectionClick();
+                  Navigator.of(context).pop();
+                },
+                child: Icon(Icons.chevron_left_rounded,
+                    color: Palette.textHigh, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Text(
+                s.settingsTitle,
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Palette.textHigh,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildProfileCard(s),
+        ],
+      ),
+    );
+  }
+
+  /// Player card: the game's emblem, wordmark and current progress. Makes the
+  /// settings screen feel like part of the game rather than a system menu.
+  Widget _buildProfileCard(S s) {
+    final pc = widget.progressController;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: Palette.isDark
+              ? [const Color(0xFF1E2638), const Color(0xFF17202F)]
+              : [Colors.white, const Color(0xFFF4F8FD)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Palette.cardBorder, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.cardShadow,
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _MiniBoard(size: 52, dark: Palette.isDark),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (b) => LinearGradient(
+                        colors: Palette.isDark
+                            ? [
+                                const Color(0xFF7DD3FC),
+                                const Color(0xFF818CF8),
+                                const Color(0xFF34D399),
+                              ]
+                            : [
+                                const Color(0xFF0C447C),
+                                const Color(0xFF2563EB),
+                                const Color(0xFF1D9E75),
+                              ],
+                      ).createShader(b),
+                      child: const Text(
+                        'GRIDLOCK',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 1.8,
+                          height: 1.1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      s.isTr ? 'Bulmaca & Strateji' : 'Puzzle & Strategy',
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Palette.textLow,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _statChip('🏆', '${pc.unlockedLevel}',
+                    s.isTr ? 'Bolum' : 'Level', Palette.coinGold),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _statChip('⭐', '${pc.totalStars}',
+                    s.isTr ? 'Yildiz' : 'Stars', Palette.coinGold),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _statChip('🔥', '${pc.dailyStore.streak}',
+                    s.isTr ? 'Seri' : 'Streak', const Color(0xFFF97316)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _statChip(
+      String emoji, String value, String label, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.30), width: 1.2),
+      ),
+      child: Column(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: Palette.textHigh,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 8.5,
+              fontWeight: FontWeight.w800,
+              color: Palette.textLow,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -62,74 +288,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Header Bar: Back button + Title Capsule
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Row(
-                  children: [
-                    ChunkyButton(
-                      color: Palette.buttonWhiteBg,
-                      shadowColor: Palette.buttonWhiteShadow,
-                      borderRadius: 22,
-                      width: 44,
-                      height: 44,
-                      depth: 3,
-                      onPressed: () {
-                        Haptics.selectionClick();
-                        Navigator.of(context).pop();
-                      },
-                      child: Icon(
-                        Icons.chevron_left_rounded,
-                        color: Palette.textHigh,
-                        size: 26,
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Palette.boardBg,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Palette.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                width: 1.4,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Palette.shadowColor,
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.tune_rounded, size: 18, color: Palette.primary),
-                                const SizedBox(width: 8),
-                                Text(
-                                  s.settingsTitle,
-                                  style: TextStyle(
-                                    fontFamily: 'Nunito',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w900,
-                                    color: Palette.textHigh,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 44), // balance back button
-                  ],
-                ),
-              ),
+              _reveal(0, _buildHeader(s)),
 
               const SizedBox(height: 8),
 
@@ -138,7 +297,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Column(
+                  child: _reveal(
+                      1,
+                      Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Section 1: Gameplay Audio & Haptics
@@ -163,6 +324,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: s.sound,
                           subtitle: s.isTr ? 'Blok kaydırma ve zafer sesleri' : 'Slide & victory sound effects',
                           value: _soundEnabled,
+                          onIconTap: () {
+                            Haptics.selectionClick();
+                            Audio.playSlide();
+                          },
                           onChanged: (val) async {
                             await widget.progressController.setSoundEnabled(val);
                             if (val) Audio.playClick();
@@ -339,7 +504,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 20),
                     ],
-                  ),
+                  )),
                 ),
               ),
             ],
@@ -458,12 +623,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    VoidCallback? onIconTap,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       child: Row(
         children: [
-          _iconBadge(icon, iconColor),
+          // Tapping the badge previews the effect (used by the sound row).
+          if (onIconTap == null)
+            _iconBadge(icon, iconColor)
+          else
+            GestureDetector(
+              onTap: onIconTap,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _iconBadge(icon, iconColor),
+                  Positioned(
+                    right: -3,
+                    bottom: -3,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Palette.cardBg,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: iconColor, width: 1.4),
+                      ),
+                      child: Icon(Icons.play_arrow_rounded,
+                          size: 11, color: iconColor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -592,6 +784,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
+              _ThemePreview(dark: _effectiveDark(currentTheme)),
             ],
           ),
           const SizedBox(height: 14),
@@ -945,4 +1139,102 @@ class _SettingsGlowPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SettingsGlowPainter old) =>
       old.isDark != isDark;
+}
+
+/// A small stylised board, used both as the brand emblem and as the live
+/// theme preview — picking a theme shows exactly how the game will look.
+class _MiniBoard extends StatelessWidget {
+  final double size;
+  final bool dark;
+  const _MiniBoard({super.key, required this.size, required this.dark});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(painter: _MiniBoardPainter(dark)),
+      );
+}
+
+class _MiniBoardPainter extends CustomPainter {
+  final bool dark;
+  const _MiniBoardPainter(this.dark);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frame = dark ? const Color(0xFF1E293B) : const Color(0xFF0C447C);
+    final surface = dark ? const Color(0xFF0B111E) : const Color(0xFFF1F6FC);
+    final pocket = dark ? const Color(0xFF131D31) : const Color(0xFFE2EBF5);
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Offset.zero & size, Radius.circular(size.width * 0.24)),
+      Paint()..color = frame,
+    );
+
+    final pad = size.width * 0.1;
+    final inner =
+        Rect.fromLTWH(pad, pad, size.width - pad * 2, size.height - pad * 2);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(inner, Radius.circular(size.width * 0.16)),
+      Paint()..color = surface,
+    );
+
+    const n = 4;
+    final cell = inner.width / n;
+    final gap = cell * 0.14;
+    final pocketPaint = Paint()..color = pocket;
+    for (int row = 0; row < n; row++) {
+      for (int col = 0; col < n; col++) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(inner.left + col * cell + gap,
+                inner.top + row * cell + gap, cell - gap * 2, cell - gap * 2),
+            Radius.circular(cell * 0.2),
+          ),
+          pocketPaint,
+        );
+      }
+    }
+
+    void block(int col, int row, int w, int h, Color a, Color b) {
+      final rect = Rect.fromLTWH(
+        inner.left + col * cell + gap,
+        inner.top + row * cell + gap,
+        cell * w - gap * 2,
+        cell * h - gap * 2,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(cell * 0.24)),
+        Paint()
+          ..shader = LinearGradient(
+            colors: [a, b],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(rect),
+      );
+    }
+
+    block(0, 0, 1, 2, const Color(0xFFAFA9EC), const Color(0xFF6D63D6));
+    block(3, 1, 1, 2, const Color(0xFF5DCAA5), const Color(0xFF189E78));
+    block(0, 2, 2, 1, Palette.targetStart, Palette.targetEnd);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniBoardPainter old) => old.dark != dark;
+}
+
+/// The theme preview cross-fades when a different mode is picked.
+class _ThemePreview extends StatelessWidget {
+  final bool dark;
+  const _ThemePreview({required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      child: _MiniBoard(key: ValueKey(dark), size: 54, dark: dark),
+    );
+  }
 }
