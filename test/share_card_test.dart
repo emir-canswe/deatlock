@@ -9,7 +9,7 @@ void main() {
       optimal: 9,
       gameUrl: 'https://emir-canswe.github.io/deadlock/',
     );
-    expect(shareStr.contains('Gridlock #218'), isTrue);
+    expect(shareStr.contains('Redbound #218'), isTrue);
     expect(shareStr.contains('9 hamle (optimal 9)'), isTrue);
     expect(shareStr.contains('🟩🟩🟩🟩🟩🟩🟩🟩🟩'), isTrue);
     expect(shareStr.contains('Optimal ✓'), isTrue);
@@ -23,7 +23,7 @@ void main() {
       optimal: 9,
       gameUrl: 'https://emir-canswe.github.io/deadlock/',
     );
-    expect(shareStr.contains('Gridlock #218'), isTrue);
+    expect(shareStr.contains('Redbound #218'), isTrue);
     expect(shareStr.contains('11 hamle (optimal 9)'), isTrue);
     expect(shareStr.contains('🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨🟨'), isTrue);
     expect(shareStr.contains('Optimal ✓'), isFalse);

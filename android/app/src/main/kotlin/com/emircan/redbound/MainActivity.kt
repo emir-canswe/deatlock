@@ -1,4 +1,4 @@
-package com.deadlock.deadlock
+package com.emircan.redbound
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -285,7 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'GRIDLOCK',
+                                      'REDBOUND',
                                       style: TextStyle(
                                         fontFamily: 'Nunito',
                                         fontSize: 14.5,
@@ -340,7 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       Column(
                         children: [
                           Text(
-                            'GRIDLOCK PUZZLE STUDIO',
+                            'REDBOUND PUZZLE STUDIO',
                             style: TextStyle(
                               fontFamily: 'Nunito',
                               fontSize: 11,

@@ -601,7 +601,7 @@ class _Hero extends StatelessWidget {
             end: Alignment.bottomRight,
           ).createShader(bounds),
           child: Text(
-            'GRIDLOCK',
+            'REDBOUND',
             textAlign: TextAlign.center,
             style: ThemeConfig.headingStyle.copyWith(
               fontSize: 42,
