@@ -3,62 +3,65 @@ import 'package:flutter/material.dart';
 import '../../core/palette.dart';
 import '../../domain/board_meta.dart';
 
-/// CustomPainter to render the board, cellular pockets, exit lights, and blocks.
-class BoardPainter extends CustomPainter {
-  final BoardMeta meta;
-  final Uint8List positions;
-  final int? dragPieceId;
-  final double dragPixelOffset;
+Shader _uiGradient(Offset from, Offset to, List<Color> colors) {
+  final isHorizontal = (to.dx - from.dx).abs() > (to.dy - from.dy).abs();
+  return LinearGradient(
+    begin: isHorizontal ? Alignment.centerLeft : Alignment.topCenter,
+    end: isHorizontal ? Alignment.centerRight : Alignment.bottomCenter,
+    colors: colors,
+  ).createShader(Rect.fromPoints(from, to));
+}
+
+/// Static board chrome: drop shadow, frame, surface, cell pockets, the exit
+/// lane tint and the exit gate.
+///
+/// None of this changes while playing, so it lives in its own cached raster
+/// layer (see the RepaintBoundary in BoardView) and only repaints when the
+/// board size or the theme changes. Keeping the blurred shadow, the 36 pockets
+/// and the lane overlay out of the per-frame path is what keeps the game
+/// smooth — previously all of it was redrawn 60 times a second.
+class BoardBackgroundPainter extends CustomPainter {
   final double cellSize;
   final bool isDark;
 
-  // Animation values
-  final double breathingValue; // 0..1 for target glow breathing
-  final double exitArrowValue;  // 0..1 for exit arrow scrolling
+  /// Padding baked into the layer so the frame + shadow can extend beyond the
+  /// 6x6 board without being clipped by the repaint boundary.
+  final double inset;
 
-  BoardPainter({
-    required this.meta,
-    required this.positions,
+  const BoardBackgroundPainter({
     required this.cellSize,
-    this.dragPieceId,
-    this.dragPixelOffset = 0.0,
-    this.breathingValue = 0.0,
-    this.exitArrowValue = 0.0,
-    this.isDark = false,
+    required this.isDark,
+    this.inset = 0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final boardPixels = cellSize * 6;
+    canvas.translate(inset, inset);
 
-    // 1. Draw Board Shadow & Physical deep blue outer frame
+    final boardPixels = cellSize * 6;
     const frameThickness = 8.0;
+
     final outerBoardRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(-frameThickness, -frameThickness, boardPixels + frameThickness * 2, boardPixels + frameThickness * 2),
+      Rect.fromLTWH(-frameThickness, -frameThickness,
+          boardPixels + frameThickness * 2, boardPixels + frameThickness * 2),
       Radius.circular(boardPixels * 0.065),
     );
-
     final boardRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, boardPixels, boardPixels),
       Radius.circular(boardPixels * 0.055),
     );
 
-    final shadowPaint = Paint()
-      ..color = Palette.shadowColor
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22);
+    // Drop shadow + physical toy frame + playing surface
+    canvas.drawRRect(
+      outerBoardRect.shift(const Offset(0, 8)),
+      Paint()
+        ..color = Palette.shadowColor
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+    );
+    canvas.drawRRect(outerBoardRect, Paint()..color = Palette.boardOuterFrame);
+    canvas.drawRRect(boardRect, Paint()..color = Palette.boardBg);
 
-    // Draw frame shadow
-    canvas.drawRRect(outerBoardRect.shift(const Offset(0, 8)), shadowPaint);
-
-    // Draw deep blue/slate toy frame base
-    final framePaint = Paint()..color = Palette.boardOuterFrame;
-    canvas.drawRRect(outerBoardRect, framePaint);
-
-    // Draw inner white/dark playing surface
-    final bgPaint = Paint()..color = Palette.boardBg;
-    canvas.drawRRect(boardRect, bgPaint);
-
-    // 2. Draw Cellular Pockets with subtle borders
+    // Cell pockets
     final cellPadding = cellSize * 0.035;
     final pocketPaint = Paint()..color = Palette.cellPocket;
     final pocketBorderPaint = Paint()
@@ -82,13 +85,10 @@ class BoardPainter extends CustomPainter {
       }
     }
 
-    // 2b. Draw ghostly exit lane overlay on Row 2 (exit row)
-    // Subtle dark tint on every cell in row 2 to show the exit path
-    final exitLanePaint = Paint()
-      ..color = const Color(0x18000000) // ~9% black overlay, breathing subtle
-      ..style = PaintingStyle.fill;
+    // Ghostly exit lane overlay on row 2
+    final exitLanePaint = Paint()..color = const Color(0x18000000);
     final exitLaneBorderPaint = Paint()
-      ..color = const Color(0x22E63946) // very faint red border pulse
+      ..color = const Color(0x22E63946)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
 
@@ -106,57 +106,90 @@ class BoardPainter extends CustomPainter {
       canvas.drawRRect(laneRect, exitLaneBorderPaint);
     }
 
-    // 3. Draw Exit Indicators (Right edge of row 2)
+    // Exit gate on the right edge of row 2
     final exitTop = 2 * cellSize;
-    final exitPaint = Paint()
-      ..shader = uiGradient(
-        Offset(boardPixels, exitTop + cellSize / 2),
-        Offset(boardPixels + cellSize * 0.4, exitTop + cellSize / 2),
-        [Palette.exitGlowEnd, Palette.exitGlowStart],
-      );
-
-    canvas.drawRect(
-      Rect.fromLTWH(boardPixels, exitTop + cellPadding, cellSize * 0.4, cellSize - cellPadding * 2),
-      exitPaint,
+    final gateRect = Rect.fromLTWH(
+      boardPixels,
+      exitTop + cellPadding,
+      cellSize * 0.4,
+      cellSize - cellPadding * 2,
     );
+    canvas.drawRect(
+      gateRect,
+      Paint()
+        ..shader = _uiGradient(
+          Offset(boardPixels, exitTop + cellSize / 2),
+          Offset(boardPixels + cellSize * 0.4, exitTop + cellSize / 2),
+          [Palette.exitGlowEnd, Palette.exitGlowStart],
+        ),
+    );
+    canvas.drawRect(
+      gateRect,
+      Paint()
+        ..color = const Color(0xFF1D9E75).withValues(alpha: 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8,
+    );
+  }
 
-    // Draw exit gate border outline
-    final gateBorderPaint = Paint()
-      ..color = const Color(0xFF1D9E75).withValues(alpha: 0.8)
+  @override
+  bool shouldRepaint(covariant BoardBackgroundPainter old) =>
+      old.cellSize != cellSize || old.isDark != isDark || old.inset != inset;
+}
+
+/// Dynamic layer: the animated exit arrows and all the blocks.
+class BoardPainter extends CustomPainter {
+  final BoardMeta meta;
+  final Uint8List positions;
+  final int? dragPieceId;
+  final double dragPixelOffset;
+  final double cellSize;
+  final bool isDark;
+
+  final double breathingValue; // 0..1 target glow breathing
+  final double exitArrowValue; // 0..1 exit arrow scrolling
+
+  BoardPainter({
+    required this.meta,
+    required this.positions,
+    required this.cellSize,
+    this.dragPieceId,
+    this.dragPixelOffset = 0.0,
+    this.breathingValue = 0.0,
+    this.exitArrowValue = 0.0,
+    this.isDark = false,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final boardPixels = cellSize * 6;
+    final exitTop = 2 * cellSize;
+
+    // Animated exit arrows — cheap paths, no per-frame text layout.
+    final arrowCy = exitTop + cellSize / 2;
+    final arrowH = cellSize * 0.26;
+    final arrowPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8;
-    canvas.drawRect(
-      Rect.fromLTWH(boardPixels, exitTop + cellPadding, cellSize * 0.4, cellSize - cellPadding * 2),
-      gateBorderPaint,
-    );
-
-    // Draw exit moving `›` arrows
-    final exitArrowTextPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-    );
+      ..strokeWidth = 2.6
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
     for (int i = 0; i < 2; i++) {
       final progress = (exitArrowValue + i * 0.5) % 1.0;
-      final arrowOpacity = (1.0 - progress) * 0.95; // brighter opacity
-      final arrowX = boardPixels + progress * cellSize * 0.3;
-
-      exitArrowTextPainter.text = TextSpan(
-        text: '›',
-        style: TextStyle(
-          fontFamily: 'Nunito',
-          fontSize: 20, // larger font size
-          fontWeight: FontWeight.w900,
-          color: Palette.exitArrowColor.withValues(alpha: arrowOpacity),
-        ),
-      );
-      exitArrowTextPainter.layout();
-      exitArrowTextPainter.paint(
-        canvas,
-        Offset(arrowX, exitTop + (cellSize - exitArrowTextPainter.height) / 2),
+      final opacity = (1.0 - progress) * 0.95;
+      final ax = boardPixels + progress * cellSize * 0.3 + cellSize * 0.08;
+      arrowPaint.color = Palette.exitArrowColor.withValues(alpha: opacity);
+      final half = arrowH / 2;
+      canvas.drawPath(
+        Path()
+          ..moveTo(ax - half * 0.5, arrowCy - half)
+          ..lineTo(ax + half * 0.5, arrowCy)
+          ..lineTo(ax - half * 0.5, arrowCy + half),
+        arrowPaint,
       );
     }
 
-    // 4. Draw Blocks
+    // Blocks
     final blockPadding = cellSize * 0.045;
     const blockRadius = Radius.circular(10);
     const highlightHeight = 2.0;
@@ -183,7 +216,6 @@ class BoardPainter extends CustomPainter {
         h = length * cellSize - blockPadding * 2;
       }
 
-      // Add drag offset
       if (isDragging) {
         if (isHoriz) {
           left += dragPixelOffset;
@@ -192,32 +224,28 @@ class BoardPainter extends CustomPainter {
         }
       }
 
-      // Proximity-based exit glow for target block
+      // Proximity-based breathing exit glow for the target block
       if (isTarget) {
         final targetRightCol = left / cellSize + length;
-        final distanceFactor = (targetRightCol - 2.0).clamp(0.0, 4.0) / 4.0; // 0..1 scale
+        final distanceFactor = (targetRightCol - 2.0).clamp(0.0, 4.0) / 4.0;
         final glowOpacity = 0.30 + distanceFactor * 0.25;
+        final glowRadius = 18.0 * (1.0 + 0.08 * breathingValue);
 
-        // Breathing animation: expands glow radius by 8% over 2200ms
-        final breatheScale = 1.0 + (0.08 * breathingValue);
-        final glowRadius = 18.0 * breatheScale;
-
-        final targetGlowPaint = Paint()
-          ..color = Palette.targetGlow.withValues(alpha: glowOpacity)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowRadius);
-
-        final targetCenter = Offset(left + w / 2, top + h / 2);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromCenter(center: targetCenter, width: w * 1.05, height: h * 1.05),
+            Rect.fromCenter(
+              center: Offset(left + w / 2, top + h / 2),
+              width: w * 1.05,
+              height: h * 1.05,
+            ),
             blockRadius,
           ),
-          targetGlowPaint,
+          Paint()
+            ..color = Palette.targetGlow.withValues(alpha: glowOpacity)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowRadius),
         );
-
       }
 
-      // Scale block when dragging
       if (isDragging) {
         const scale = 1.03;
         final cx = left + w / 2;
@@ -228,12 +256,9 @@ class BoardPainter extends CustomPainter {
         h *= scale;
       }
 
-      final blockRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, top, w, h),
-        blockRadius,
-      );
+      final blockRect =
+          RRect.fromRectAndRadius(Rect.fromLTWH(left, top, w, h), blockRadius);
 
-      // Create colors
       final Color bodyColor;
       final Color borderColor;
       final bool useGradientBody;
@@ -243,16 +268,16 @@ class BoardPainter extends CustomPainter {
         borderColor = Palette.targetBorder;
         useGradientBody = true;
       } else {
-        final pair = Palette.normalBlockGradients[i % Palette.normalBlockGradients.length];
+        final pair = Palette
+            .normalBlockGradients[i % Palette.normalBlockGradients.length];
         bodyColor = pair.$1;
         borderColor = pair.$2;
         useGradientBody = false;
       }
 
-      // Fill block body
       final bodyPaint = Paint();
       if (useGradientBody) {
-        bodyPaint.shader = uiGradient(
+        bodyPaint.shader = _uiGradient(
           Offset(left, top),
           Offset(left, top + h),
           [Palette.targetStart, Palette.targetEnd],
@@ -262,52 +287,46 @@ class BoardPainter extends CustomPainter {
       }
       canvas.drawRRect(blockRect, bodyPaint);
 
-      // Draw chunky outer border
-      final borderPaint = Paint()
-        ..color = borderColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5;
-      canvas.drawRRect(blockRect, borderPaint);
-
-      // Inner highlight line (top 2px white strip with 35% opacity)
-      final highlightPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.35)
-        ..style = PaintingStyle.fill;
-
-      // Inner bottom shadow strip (bottom 4px dark strip with 15% opacity for 3D gloss effect)
-      final darkShadowPaint = Paint()
-        ..color = Colors.black.withValues(alpha: 0.15)
-        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        blockRect,
+        Paint()
+          ..color = borderColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
 
       canvas.save();
       canvas.clipRRect(blockRect);
-      // Draw top highlight
-      canvas.drawRect(Rect.fromLTWH(left + 1, top + 1, w - 2, highlightHeight), highlightPaint);
-      // Draw bottom shadow
-      canvas.drawRect(Rect.fromLTWH(left + 1, top + h - 5.0, w - 2, 4.0), darkShadowPaint);
+      canvas.drawRect(
+        Rect.fromLTWH(left + 1, top + 1, w - 2, highlightHeight),
+        Paint()..color = Colors.white.withValues(alpha: 0.35),
+      );
+      canvas.drawRect(
+        Rect.fromLTWH(left + 1, top + h - 5.0, w - 2, 4.0),
+        Paint()..color = Colors.black.withValues(alpha: 0.15),
+      );
       canvas.restore();
 
-      // ── Target block: unmistakable "slide me to the exit" styling ──
-      // A bullseye emblem marks it as THE goal piece, and flowing chevrons
-      // point the way out — so players instantly know which block to move.
+      // Target block: unmistakable "slide me to the exit" styling
       if (isTarget && isHoriz) {
         canvas.save();
         canvas.clipRRect(blockRect);
 
-        // Glossy top sheen for a premium, distinct look
         final sheenRect = Rect.fromLTWH(left, top, w, h * 0.55);
-        final sheenPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white.withValues(alpha: 0.30),
-              Colors.white.withValues(alpha: 0.0),
-            ],
-          ).createShader(sheenRect);
-        canvas.drawRect(sheenRect, sheenPaint);
+        canvas.drawRect(
+          sheenRect,
+          Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white.withValues(alpha: 0.30),
+                Colors.white.withValues(alpha: 0.0),
+              ],
+            ).createShader(sheenRect),
+        );
 
-        // Bullseye emblem on the left cap → "this is the piece to free"
+        // Bullseye emblem marks the piece to free
         final emblem = Offset(left + h * 0.52, top + h / 2);
         final rOuter = h * 0.23;
         canvas.drawCircle(
@@ -324,7 +343,7 @@ class BoardPainter extends CustomPainter {
           Paint()..color = Colors.white.withValues(alpha: 0.95),
         );
 
-        // Flowing chevrons across the body, pointing at the exit
+        // Flowing chevrons pointing at the exit
         final chevPaint = Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = h * 0.085
@@ -343,15 +362,16 @@ class BoardPainter extends CustomPainter {
           final tpos = ((cx - zoneLeft) / span).clamp(0.0, 1.0);
           final fade = (1.0 - (tpos - 0.5).abs() * 2).clamp(0.0, 1.0);
           chevPaint.color = Colors.white.withValues(alpha: 0.18 + fade * 0.6);
-          final path = Path()
-            ..moveTo(cx - half * 0.55, cy - half)
-            ..lineTo(cx + half * 0.55, cy)
-            ..lineTo(cx - half * 0.55, cy + half);
-          canvas.drawPath(path, chevPaint);
+          canvas.drawPath(
+            Path()
+              ..moveTo(cx - half * 0.55, cy - half)
+              ..lineTo(cx + half * 0.55, cy)
+              ..lineTo(cx - half * 0.55, cy + half),
+            chevPaint,
+          );
         }
         canvas.restore();
 
-        // Bright inner outline so it reads as special vs. every other block
         canvas.drawRRect(
           blockRect.deflate(1.6),
           Paint()
@@ -363,14 +383,11 @@ class BoardPainter extends CustomPainter {
     }
   }
 
-  Shader uiGradient(Offset from, Offset to, List<Color> colors) {
-    final isHorizontal = (to.dx - from.dx).abs() > (to.dy - from.dy).abs();
-    return LinearGradient(
-      begin: isHorizontal ? Alignment.centerLeft : Alignment.topCenter,
-      end: isHorizontal ? Alignment.centerRight : Alignment.bottomCenter,
-      colors: colors,
-    ).createShader(Rect.fromPoints(from, to));
-  }
+  /// The idle decorations (breathing target glow, scrolling exit arrows) are
+  /// quantized so the board repaints ~10-15x per second instead of on every
+  /// vsync. Gameplay stays perfectly smooth: drags and snap animations change
+  /// [positions] / [dragPixelOffset], which are still compared exactly.
+  static int _step(double v, int steps) => (v * steps).floor();
 
   @override
   bool shouldRepaint(covariant BoardPainter oldDelegate) {
@@ -379,8 +396,8 @@ class BoardPainter extends CustomPainter {
         dragPieceId != oldDelegate.dragPieceId ||
         dragPixelOffset != oldDelegate.dragPixelOffset ||
         cellSize != oldDelegate.cellSize ||
-        breathingValue != oldDelegate.breathingValue ||
-        exitArrowValue != oldDelegate.exitArrowValue ||
-        isDark != oldDelegate.isDark;
+        isDark != oldDelegate.isDark ||
+        _step(breathingValue, 22) != _step(oldDelegate.breathingValue, 22) ||
+        _step(exitArrowValue, 24) != _step(oldDelegate.exitArrowValue, 24);
   }
 }

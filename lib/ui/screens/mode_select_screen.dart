@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/haptics.dart';
@@ -44,25 +45,46 @@ class _ModeSelectScreenState extends State<ModeSelectScreen>
   late final AnimationController _entrance;
   late final AnimationController _pulse;
 
+  // The ambient drift and the pulsing glow are decorative and very slow, so
+  // they are stepped by a 10fps timer rather than a repeating vsync ticker.
+  // A forever-repeating ticker makes Flutter rasterize a new frame 60 times a
+  // second indefinitely, which pinned the raster thread and heated the device
+  // until it thermal-throttled.
+  Timer? _idleAnimTimer;
+  double _pulsePhase = 0.0;
+
   @override
   void initState() {
     super.initState();
     _ambient = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 16),
-    )..repeat();
+    );
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1700),
-    )..repeat(reverse: true);
+    );
     _entrance = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 950),
     )..forward();
+
+    const tick = Duration(milliseconds: 100);
+    const ambientStep = 100 / 16000;
+    const pulseStep = 100 / 1700;
+    _idleAnimTimer = Timer.periodic(tick, (_) {
+      if (!mounted) return;
+      _ambient.value = (_ambient.value + ambientStep) % 1.0;
+      // Triangle wave so the glow eases up and back down without popping.
+      _pulsePhase = (_pulsePhase + pulseStep) % 1.0;
+      _pulse.value =
+          _pulsePhase < 0.5 ? _pulsePhase * 2 : 2 - _pulsePhase * 2;
+    });
   }
 
   @override
   void dispose() {
+    _idleAnimTimer?.cancel();
     _ambient.dispose();
     _pulse.dispose();
     _entrance.dispose();
@@ -350,27 +372,38 @@ class _AmbientPainter extends CustomPainter {
     final cols = isDark ? _dark : _light;
     final blockAlpha = isDark ? 0.13 : 0.16;
 
-    // Two large soft glow orbs for depth.
-    final glow1 = Paint()
-      ..color = (isDark ? const Color(0xFF1D9E75) : const Color(0xFF1D9E75))
-          .withValues(alpha: isDark ? 0.14 : 0.10)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 90);
-    final glow2 = Paint()
-      ..color = (isDark ? const Color(0xFF6366F1) : const Color(0xFF38BDF8))
-          .withValues(alpha: isDark ? 0.12 : 0.09)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 100);
+    // Two large soft glow orbs for depth. These use a radial gradient instead
+    // of MaskFilter.blur: it reads the same but costs a fraction of a real
+    // gaussian blur, which previously ran on every single frame.
     final a = t * 2 * math.pi;
-    canvas.drawCircle(
+
+    void orb(Offset center, double radius, Color color, double alpha) {
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: alpha),
+              color.withValues(alpha: 0.0),
+            ],
+          ).createShader(Rect.fromCircle(center: center, radius: radius)),
+      );
+    }
+
+    orb(
       Offset(size.width * 0.18 + math.cos(a) * 20,
           size.height * 0.16 + math.sin(a) * 16),
       size.width * 0.34,
-      glow1,
+      const Color(0xFF1D9E75),
+      isDark ? 0.18 : 0.13,
     );
-    canvas.drawCircle(
+    orb(
       Offset(size.width * 0.86 + math.cos(a + 2) * 22,
           size.height * 0.30 + math.sin(a + 2) * 18),
       size.width * 0.30,
-      glow2,
+      isDark ? const Color(0xFF6366F1) : const Color(0xFF38BDF8),
+      isDark ? 0.16 : 0.12,
     );
 
     for (final b in _blocks) {
@@ -388,16 +421,19 @@ class _AmbientPainter extends CustomPainter {
       final rect = Rect.fromLTWH(x + dx, baseY + dy, w, h);
       final rrect =
           RRect.fromRectAndRadius(rect, Radius.circular(h.clamp(8, 20) * 0.45));
-      final fill = Paint()
-        ..color = color.withValues(alpha: blockAlpha)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-      canvas.drawRRect(rrect, fill);
+      canvas.drawRRect(
+          rrect, Paint()..color = color.withValues(alpha: blockAlpha));
     }
   }
 
+  // The drift is a slow 16s loop, so repainting the whole screen on every
+  // vsync is pure waste. Quantizing the time value limits this background to
+  // ~10 repaints per second instead of 60.
+  static int _step(double v) => (v * 160).floor();
+
   @override
   bool shouldRepaint(covariant _AmbientPainter old) =>
-      old.t != t || old.isDark != isDark;
+      _step(old.t) != _step(t) || old.isDark != isDark;
 }
 
 // ══════════════════════════════════════════════════════════════════════

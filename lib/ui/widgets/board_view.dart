@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/audio.dart';
@@ -8,6 +9,10 @@ import '../../domain/move.dart';
 import '../../state/game_controller.dart';
 import 'board_painter.dart';
 import 'confetti_painter.dart';
+
+/// Extra padding around the cached static board layer so the frame and its
+/// blurred drop shadow are not clipped by the repaint boundary.
+const double _bgInset = 44.0;
 
 class BoardView extends StatefulWidget {
   final GameController controller;
@@ -49,8 +54,16 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       }
     });
   }
-  late final AnimationController _breathingController;
-  late final AnimationController _exitArrowController;
+  // Decorative idle animations (breathing target glow, scrolling exit arrows)
+  // are driven by a low-frequency timer instead of a vsync ticker. A repeating
+  // ticker forces Flutter to rasterize a new frame 60x a second forever, which
+  // pinned the raster thread and cooked the device. 10fps looks the same for
+  // these slow effects and leaves the CPU idle.
+  Timer? _idleAnimTimer;
+  double _breathPhase = 0.0;
+  double _arrowPhase = 0.0;
+
+  double get _breathValue => (math.sin(2 * math.pi * _breathPhase) + 1) / 2;
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnimation;
 
@@ -79,15 +92,16 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    _breathingController = AnimationController(
-      vsync: this,
-      duration: Motion.breatheDuration,
-    )..repeat(reverse: true);
-
-    _exitArrowController = AnimationController(
-      vsync: this,
-      duration: Motion.exitArrowDuration,
-    )..repeat();
+    const tick = Duration(milliseconds: 100);
+    final breathStep = tick.inMilliseconds / Motion.breatheDuration.inMilliseconds;
+    final arrowStep = tick.inMilliseconds / Motion.exitArrowDuration.inMilliseconds;
+    _idleAnimTimer = Timer.periodic(tick, (_) {
+      if (!mounted) return;
+      setState(() {
+        _breathPhase = (_breathPhase + breathStep) % 1.0;
+        _arrowPhase = (_arrowPhase + arrowStep) % 1.0;
+      });
+    });
 
     _shakeController = AnimationController(
       vsync: this,
@@ -166,8 +180,7 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _breathingController.dispose();
-    _exitArrowController.dispose();
+    _idleAnimTimer?.cancel();
     _shakeController.dispose();
     _snapController.dispose();
     _confettiController.dispose();
@@ -368,7 +381,26 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                 width: boardPixels,
                 height: boardPixels,
                 child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
+                    // Static board chrome (shadow, frame, pockets, exit gate)
+                    // lives in its own cached raster layer, so it is painted
+                    // once instead of on every animation frame.
+                    Positioned(
+                      left: -_bgInset,
+                      top: -_bgInset,
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: BoardBackgroundPainter(
+                            cellSize: currentCellSize,
+                            isDark: Palette.isDark,
+                            inset: _bgInset,
+                          ),
+                          size: Size(boardPixels + _bgInset * 2,
+                              boardPixels + _bgInset * 2),
+                        ),
+                      ),
+                    ),
                     GestureDetector(
                       onTapUp: _onTapUp,
                       onPanStart: _onPanStart,
@@ -376,8 +408,6 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                       onPanEnd: _onPanEnd,
                       child: AnimatedBuilder(
                         animation: Listenable.merge([
-                          _breathingController,
-                          _exitArrowController,
                           _shakeController,
                           _snapController,
                         ]),
@@ -397,8 +427,8 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                                   cellSize: currentCellSize,
                                   dragPieceId: _dragPieceId ?? _shakePieceId,
                                   dragPixelOffset: _dragPieceId != null ? _dragPixelOffset : shakeOffset,
-                                  breathingValue: _breathingController.value,
-                                  exitArrowValue: _exitArrowController.value,
+                                  breathingValue: _breathValue,
+                                  exitArrowValue: _arrowPhase,
                                   isDark: Palette.isDark,
                                 ),
                                 size: Size(boardPixels, boardPixels),
