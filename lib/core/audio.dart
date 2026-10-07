@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../data/progress_store.dart';
 
@@ -48,44 +49,66 @@ class Audio {
     bool lowLatency = true,
   }) async {
     final player = AudioPlayer();
-    if (lowLatency) {
-      await player.setPlayerMode(PlayerMode.lowLatency);
-    }
-    // Keep the decoded source alive so it can be replayed without reloading.
+    // NOTE: PlayerMode.lowLatency uses Android's SoundPool, which does not
+    // reliably replay a pre-loaded source here (no playback was registered by
+    // the system at all). The default media-player mode supports
+    // setSource + seek + resume properly, so we keep the asset loaded once and
+    // simply rewind it — still no per-tap reloading.
     await player.setReleaseMode(ReleaseMode.stop);
     await player.setSource(AssetSource(asset));
     return player;
   }
 
   static Future<void> _warmUp() async {
+    // Each player is prepared independently so one failure cannot silence the
+    // whole game.
+    for (int i = 0; i < 3; i++) {
+      final p = await _tryCreate(_clickAsset);
+      if (p != null) _clickPool.add(p);
+    }
+    for (int i = 0; i < 4; i++) {
+      final p = await _tryCreate(_slideAsset);
+      if (p != null) _slidePool.add(p);
+    }
+    // The win jingle is long, so it uses the normal (non low-latency) mode.
+    _winPlayer = await _tryCreate(_winAsset, lowLatency: false);
+
+    _ready = _clickPool.isNotEmpty || _slidePool.isNotEmpty || _winPlayer != null;
+  }
+
+  static Future<AudioPlayer?> _tryCreate(
+    String asset, {
+    bool lowLatency = true,
+  }) async {
     try {
-      for (int i = 0; i < 3; i++) {
-        _clickPool.add(await _createPlayer(_clickAsset));
-      }
-      for (int i = 0; i < 4; i++) {
-        _slidePool.add(await _createPlayer(_slideAsset));
-      }
-      // The win jingle is long, so it uses the normal (non low-latency) mode.
-      _winPlayer = await _createPlayer(_winAsset, lowLatency: false);
-      _ready = true;
-    } catch (_) {
-      // Device audio unavailable — the game stays fully playable, just silent.
-      _ready = false;
+      return await _createPlayer(asset, lowLatency: lowLatency);
+    } catch (e) {
+      debugPrint('[Audio] could not prepare $asset: $e');
+      return null;
     }
   }
 
-  /// Rewind + play an already-loaded player. Fire-and-forget, never throws.
+  /// Replay an already-loaded player from the start. Never throws.
+  ///
+  /// `seek` is not supported by Android's SoundPool backend used for
+  /// low-latency playback, so a failure there must NOT prevent `resume` from
+  /// running — otherwise no sound is heard at all.
   static Future<void> _restart(AudioPlayer player) async {
     try {
       await player.seek(Duration.zero);
-      await player.resume();
     } catch (_) {
-      // Ignore: a busy/limited audio device must never break gameplay.
+      // Some backends do not support seeking; resume() still restarts it.
+    }
+    try {
+      await player.resume();
+    } catch (e) {
+      // A busy/limited audio device must never break gameplay.
+      debugPrint('[Audio] resume failed: $e');
     }
   }
 
   static void _playFrom(List<AudioPlayer> pool, int Function() next) {
-    if (!_enabled || !_ready || pool.isEmpty) return;
+    if (!_enabled || pool.isEmpty) return;
     _restart(pool[next()]);
   }
 

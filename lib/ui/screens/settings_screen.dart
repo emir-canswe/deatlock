@@ -35,15 +35,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = S.of(context);
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Palette.bgStart, Palette.bgEnd],
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Palette.bgStart, Palette.bgEnd],
+                ),
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
+          // Soft depth glow. Painted once and cached — static, so it costs
+          // nothing per frame.
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: CustomPaint(painter: _SettingsGlowPainter(Palette.isDark)),
+            ),
+          ),
+          SafeArea(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
@@ -178,23 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                           child: Row(
                             children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEF4444).withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-                                    width: 1.2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.restart_alt_rounded,
-                                  color: Color(0xFFEF4444),
-                                  size: 22,
-                                ),
-                              ),
+                              _iconBadge(Icons.restart_alt_rounded, const Color(0xFFEF4444)),
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
@@ -258,23 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                           child: Row(
                             children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0EA5E9).withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                                    width: 1.2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.info_outline_rounded,
-                                  color: Color(0xFF0EA5E9),
-                                  size: 22,
-                                ),
-                              ),
+                              _iconBadge(Icons.info_outline_rounded, const Color(0xFF0EA5E9)),
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
@@ -366,24 +346,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
             ),
           ),
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSectionLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6, bottom: 8),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: 'Nunito',
-          fontSize: 11.5,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.0,
-          color: Palette.textLow,
-        ),
+      padding: const EdgeInsets.only(left: 2, bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 15,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Palette.primary, Color(0xFF0F7A5C)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.0,
+              color: Palette.textHigh,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Palette.isDark
+                  ? const Color(0xFF1E293B)
+                  : const Color(0xFFE2E8F0),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Gradient icon badge with a soft colored glow, matching the mode cards on
+  /// the home screen.
+  static Widget _iconBadge(IconData icon, Color color, {double size = 44}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color.lerp(color, Colors.white, 0.28)!, color],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.38),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: size * 0.5),
     );
   }
 
@@ -391,13 +423,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Palette.cardBg,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Palette.cardBorder, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Palette.cardShadow,
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -431,19 +463,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: iconColor.withValues(alpha: 0.3),
-                width: 1.2,
-              ),
-            ),
-            child: Icon(icon, color: iconColor, size: 22),
-          ),
+          _iconBadge(icon, iconColor),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -544,23 +564,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                    width: 1.2,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.palette_rounded,
-                  color: Color(0xFF10B981),
-                  size: 22,
-                ),
-              ),
+              _iconBadge(Icons.palette_rounded, const Color(0xFF10B981)),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -656,23 +660,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
-                    width: 1.2,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.translate_rounded,
-                  color: Color(0xFF0284C7),
-                  size: 22,
-                ),
-              ),
+              _iconBadge(Icons.translate_rounded, const Color(0xFF38BDF8)),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -909,4 +897,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+/// Soft, static background glow that gives the settings screen the same sense
+/// of depth as the home screen. It never animates, so it is painted once and
+/// cached by the RepaintBoundary above it.
+class _SettingsGlowPainter extends CustomPainter {
+  final bool isDark;
+  const _SettingsGlowPainter(this.isDark);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    void orb(Offset center, double radius, Color color, double alpha) {
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: alpha),
+              color.withValues(alpha: 0.0),
+            ],
+          ).createShader(Rect.fromCircle(center: center, radius: radius)),
+      );
+    }
+
+    orb(
+      Offset(size.width * 0.14, size.height * 0.06),
+      size.width * 0.62,
+      const Color(0xFF1D9E75),
+      isDark ? 0.16 : 0.12,
+    );
+    orb(
+      Offset(size.width * 0.92, size.height * 0.34),
+      size.width * 0.55,
+      isDark ? const Color(0xFF6366F1) : const Color(0xFF38BDF8),
+      isDark ? 0.14 : 0.10,
+    );
+    orb(
+      Offset(size.width * 0.5, size.height * 1.02),
+      size.width * 0.7,
+      isDark ? const Color(0xFF8B5CF6) : const Color(0xFFA78BFA),
+      isDark ? 0.10 : 0.08,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SettingsGlowPainter old) =>
+      old.isDark != isDark;
 }
