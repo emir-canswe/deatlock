@@ -63,6 +63,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Timer? _undoTimer;
 
+  /// Capture helper: replays the optimal solution move by move, with none of
+  /// the hint UI on screen, so clean promo footage can be recorded.
+  Timer? _demoTimer;
+
   // Zen mode transition animations
   late final AnimationController _zenTransitionController;
   bool _zenTransitioning = false;
@@ -93,6 +97,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _gameController?.dispose();
     _zenTransitionController.dispose();
     _undoTimer?.cancel();
+    _demoTimer?.cancel();
     super.dispose();
   }
 
@@ -108,6 +113,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _loadLevel() async {
+    _demoTimer?.cancel();
+    _demoTimer = null;
     if (!mounted) return;
     setState(() {
       _loading = true;
@@ -198,6 +205,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           setState(() => _zenTransitioning = false);
         });
       });
+    });
+  }
+
+  void _toggleAutoSolve() {
+    if (_demoTimer != null) {
+      _demoTimer!.cancel();
+      _demoTimer = null;
+      return;
+    }
+    final gc = _gameController;
+    if (gc == null || gc.won) return;
+    Haptics.mediumImpact();
+    _demoTimer = Timer.periodic(const Duration(milliseconds: 520), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final c = _gameController;
+      if (c == null || c.won) {
+        t.cancel();
+        _demoTimer = null;
+        return;
+      }
+      final move = nextBestMove(c.meta, c.boardState);
+      if (move == null) {
+        t.cancel();
+        _demoTimer = null;
+        return;
+      }
+      _boardViewKey.currentState?.animateMove(move);
     });
   }
 
@@ -361,6 +398,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               : (_gameController?.moveCount ?? 0),
                           optimalMoves: activeMode == GameMode.levels ? _gameController?.optimalMoves : null,
                           onBack: () => Navigator.of(context).pop(),
+                          onTitleLongPress: _toggleAutoSolve,
                         ),
 
                         // 2. Sprint Timer Bar

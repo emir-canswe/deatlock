@@ -13,6 +13,10 @@ class TopBar extends StatelessWidget {
   final int? optimalMoves;
   final VoidCallback onBack;
 
+  /// Capture helper: long-pressing the title plays the level's optimal
+  /// solution so clean gameplay footage can be recorded.
+  final VoidCallback? onTitleLongPress;
+
   const TopBar({
     super.key,
     required this.mode,
@@ -20,6 +24,7 @@ class TopBar extends StatelessWidget {
     required this.moves,
     this.optimalMoves,
     required this.onBack,
+    this.onTitleLongPress,
   });
 
   @override
@@ -75,7 +80,9 @@ class TopBar extends StatelessWidget {
           const SizedBox(width: 10),
           // Title box (Modern HUD Pill)
           Expanded(
-            child: _PillBox(
+            child: GestureDetector(
+              onLongPress: onTitleLongPress,
+              child: _PillBox(
               child: Text(
                 title,
                 textAlign: TextAlign.center,
@@ -86,6 +93,7 @@ class TopBar extends StatelessWidget {
                   color: Palette.textHigh,
                 ),
               ),
+            ),
             ),
           ),
           if (statText.isNotEmpty) ...[
