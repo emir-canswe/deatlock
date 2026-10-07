@@ -18,10 +18,14 @@ class BoardView extends StatefulWidget {
   final GameController controller;
   final VoidCallback? onWin;
 
+  /// True in Levels mode: every obstacle shares one colour.
+  final bool uniformBlocks;
+
   const BoardView({
     super.key,
     required this.controller,
     this.onWin,
+    this.uniformBlocks = false,
   });
 
   @override
@@ -430,6 +434,7 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                                   breathingValue: _breathValue,
                                   exitArrowValue: _arrowPhase,
                                   isDark: Palette.isDark,
+                                  uniformBlocks: widget.uniformBlocks,
                                 ),
                                 size: Size(boardPixels, boardPixels),
                               );

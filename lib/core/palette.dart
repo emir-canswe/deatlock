@@ -60,6 +60,14 @@ class Palette {
           (Color(0xFFFAC775), Color(0xFF854F0B)), // amber / amber border
         ];
 
+  /// Single colour used for every obstacle block in Levels mode, so the only
+  /// piece that stands out is the red target the player has to free.
+  /// Violet contrasts strongly with the red target without clashing with the
+  /// green exit gate.
+  static (Color, Color) get uniformBlock => isDark
+      ? const (Color(0xFF8B5CF6), Color(0xFF5B21B6))
+      : const (Color(0xFFAFA9EC), Color(0xFF534AB7));
+
   // Target block colors (glowing gold/sunset orange-red)
   static const Color targetStart = Color(0xFFFF7A45);
   static const Color targetEnd = Color(0xFFE63946);

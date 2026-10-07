@@ -146,6 +146,10 @@ class BoardPainter extends CustomPainter {
   final double cellSize;
   final bool isDark;
 
+  /// Levels mode paints every obstacle in one colour so the target block is
+  /// unmistakable. The other modes keep the varied palette.
+  final bool uniformBlocks;
+
   final double breathingValue; // 0..1 target glow breathing
   final double exitArrowValue; // 0..1 exit arrow scrolling
 
@@ -158,6 +162,7 @@ class BoardPainter extends CustomPainter {
     this.breathingValue = 0.0,
     this.exitArrowValue = 0.0,
     this.isDark = false,
+    this.uniformBlocks = false,
   });
 
   @override
@@ -268,8 +273,10 @@ class BoardPainter extends CustomPainter {
         borderColor = Palette.targetBorder;
         useGradientBody = true;
       } else {
-        final pair = Palette
-            .normalBlockGradients[i % Palette.normalBlockGradients.length];
+        final pair = uniformBlocks
+            ? Palette.uniformBlock
+            : Palette.normalBlockGradients[
+                i % Palette.normalBlockGradients.length];
         bodyColor = pair.$1;
         borderColor = pair.$2;
         useGradientBody = false;
@@ -397,6 +404,7 @@ class BoardPainter extends CustomPainter {
         dragPixelOffset != oldDelegate.dragPixelOffset ||
         cellSize != oldDelegate.cellSize ||
         isDark != oldDelegate.isDark ||
+        uniformBlocks != oldDelegate.uniformBlocks ||
         _step(breathingValue, 22) != _step(oldDelegate.breathingValue, 22) ||
         _step(exitArrowValue, 24) != _step(oldDelegate.exitArrowValue, 24);
   }

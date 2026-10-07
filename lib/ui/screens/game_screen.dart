@@ -424,6 +424,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                           key: _boardViewKey,
                                           controller: _gameController!,
                                           onWin: _onWin,
+                                          uniformBlocks:
+                                              activeMode == GameMode.levels,
                                         ),
                                         if (activeMode == GameMode.levels &&
                                             _currentLevelNumber <= 5 &&
