@@ -560,30 +560,12 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Board emblem with pulsing glow halo
-        AnimatedBuilder(
-          animation: pulse,
-          builder: (context, child) {
-            final g = Curves.easeInOut.transform(pulse.value);
-            return Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Palette.targetEnd.withValues(alpha: 0.18 + g * 0.18),
-                    blurRadius: 24 + g * 16,
-                    spreadRadius: 1 + g * 3,
-                  ),
-                ],
-              ),
-              child: child,
-            );
-          },
-          // The logo already carries the name, so it is the hero on its own —
-          // a separate wordmark underneath would spell "REDBOUND" twice.
-          child: const _BoardEmblem(size: 132),
-        ),
-        const SizedBox(height: 14),
+        // The brand mark is the game's own hero object: the wordmark with the
+        // red target block breaking out to the right of it. Drawn with vectors
+        // rather than a pasted-on logo image, so it sits in the screen instead
+        // of on top of it.
+        _BrandMark(pulse: pulse),
+        const SizedBox(height: 12),
         Text(
           s.isTr ? 'BULMACA & STRATEJİ' : 'PUZZLE & STRATEGY',
           style: TextStyle(
@@ -688,49 +670,6 @@ class _StatChip extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Brand emblem displaying the Redbound game logo.
-class _BoardEmblem extends StatelessWidget {
-  final double size;
-  const _BoardEmblem({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(size * 0.25);
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        border: Border.all(
-          color: Palette.isDark
-              ? const Color(0xFF38BDF8).withValues(alpha: 0.45)
-              : const Color(0xFF0C447C).withValues(alpha: 0.35),
-          width: 2.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.25 - 1.5),
-        child: Image.asset(
-          'assets/icon/redbound_logo.png',
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          // Decode at display resolution instead of the full source size.
-          cacheWidth: 384,
-          cacheHeight: 384,
-        ),
       ),
     );
   }
@@ -1248,6 +1187,94 @@ class _DailyMissionCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Wordmark plus the red target block escaping to the right of it.
+class _BrandMark extends StatelessWidget {
+  final Animation<double> pulse;
+  const _BrandMark({required this.pulse});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: ShaderMask(
+              shaderCallback: (bounds) => LinearGradient(
+                colors: Palette.isDark
+                    ? [
+                        const Color(0xFF7DD3FC),
+                        const Color(0xFF818CF8),
+                        const Color(0xFF34D399),
+                      ]
+                    : [
+                        const Color(0xFF0C447C),
+                        const Color(0xFF2563EB),
+                        const Color(0xFF1D9E75),
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: Text(
+                'REDBOUND',
+                style: ThemeConfig.headingStyle.copyWith(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2.0,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        AnimatedBuilder(
+          animation: pulse,
+          builder: (context, _) =>
+              _TargetChip(glow: Curves.easeInOut.transform(pulse.value)),
+        ),
+      ],
+    );
+  }
+}
+
+/// The red block, mid-escape — same colours and chevrons as on the board.
+class _TargetChip extends StatelessWidget {
+  final double glow;
+  const _TargetChip({required this.glow});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Palette.targetStart, Palette.targetEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(9),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.targetEnd.withValues(alpha: 0.30 + glow * 0.30),
+            blurRadius: 12 + glow * 12,
+            spreadRadius: glow * 2,
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.keyboard_double_arrow_right_rounded,
+        color: Colors.white,
+        size: 20,
       ),
     );
   }
