@@ -1,6 +1,6 @@
-# Deadlock — Dağıtım ve Yayınlama Kılavuzu (Deployment Guide)
+# Redbound — Dağıtım ve Yayınlama Kılavuzu (Deployment Guide)
 
-Bu kılavuz, Deadlock oyununun Web PWA (birincil) ve Android APK (ikincil) platformları için release sürümünün nasıl derlenip yayınlanacağını anlatmaktadır.
+Bu kılavuz, Redbound oyununun Web PWA (birincil) ve Android APK (ikincil) platformları için release sürümünün nasıl derlenip yayınlanacağını anlatmaktadır.
 
 ---
 

@@ -1,6 +1,6 @@
-# 🧱 Deadlock — Sliding-Block Puzzle Game
+# 🧱 Redbound — Sliding-Block Puzzle Game
 
-Deadlock is a premium, high-performance, and beautifully designed sliding-block puzzle game built with Flutter. Inspired by classic block slide mechanics, it features a custom Xorshift32 PRNG-driven deterministic board generator, dynamic solver algorithms, and lofi arcade-style custom synthesized sound effects and vibration feedback.
+Redbound is a sliding-block puzzle game built with Flutter: free the red block from a 6x6 jam by sliding the other blocks out of its way. Inspired by classic block slide mechanics, it features a custom Xorshift32 PRNG-driven deterministic board generator, dynamic solver algorithms, and lofi arcade-style custom synthesized sound effects and vibration feedback.
 
 ---
 
@@ -70,6 +70,30 @@ flutter build web --release --base-href /deadlock/
 To generate split APKs optimized for target CPU architectures:
 ```bash
 flutter build apk --release --split-per-abi
+```
+
+### Release signing
+Release builds fall back to debug keys unless a keystore is configured, and
+Play will reject a debug-signed upload. To sign properly:
+
+1. Generate a keystore once and keep the `.jks` file safe and backed up —
+   losing it means the app can never be updated again:
+   ```bash
+   keytool -genkey -v -keystore redbound-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias redbound
+   ```
+2. Copy `android/key.properties.example` to `android/key.properties` and fill
+   it in. That file is git-ignored and must never be committed.
+3. Build the bundle Play expects:
+   ```bash
+   flutter build appbundle --release
+   ```
+
+### Capture builds
+Recording promo footage is easier with the auto-solve helper, which replays a
+level's optimal solution when you long-press the level title. It is compiled
+out of normal builds and must be switched on explicitly:
+```bash
+flutter build apk --release --dart-define=CAPTURE=true
 ```
 
 ---

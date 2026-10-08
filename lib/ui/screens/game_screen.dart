@@ -17,12 +17,19 @@ import '../../state/progress_controller.dart';
 import '../../state/sprint_controller.dart';
 import '../widgets/board_view.dart';
 import '../widgets/bottom_bar.dart';
+import '../widgets/chunky_button.dart';
 import '../widgets/hint_overlay.dart';
 import '../widgets/sprint_bar.dart';
 import '../widgets/top_bar.dart';
 import '../widgets/tutorial_overlay.dart';
 import '../widgets/win_confetti.dart';
 import '../widgets/win_sheet.dart';
+
+/// Compile-time switch for the capture helper (the auto-solve used to record
+/// promo footage). It is compiled out of normal release builds; enable it only
+/// when recording:
+///   flutter build apk --release --dart-define=CAPTURE=true
+const bool kCaptureMode = bool.fromEnvironment('CAPTURE');
 
 class GameScreen extends StatefulWidget {
   final GameMode mode;
@@ -48,6 +55,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   SprintController? _sprintController;
 
   bool _loading = true;
+  bool _loadFailed = false;
   bool _showWin = false;
   bool _guideMinimized = false;
 
@@ -118,6 +126,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() {
       _loading = true;
+      _loadFailed = false;
       _showWin = false;
       _hintPieceIndex = null;
       _hintMove = null;
@@ -139,23 +148,87 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       seed = rand;
     }
 
-    final level = await _levelRepo.getLevel(seed);
-    if (!mounted) return;
+    try {
+      final level = await _levelRepo.getLevel(seed);
+      if (!mounted) return;
 
-    if (_gameController != null) {
-      _gameController!.removeListener(_onGameChange);
-      _gameController!.dispose();
+      if (_gameController != null) {
+        _gameController!.removeListener(_onGameChange);
+        _gameController!.dispose();
+      }
+      _gameController = GameController(
+        meta: level.meta,
+        initialPositions: level.initialPositions,
+        optimalMoves: level.optimalMoves,
+      );
+      _gameController!.addListener(_onGameChange);
+
+      setState(() {
+        _loading = false;
+      });
+    } catch (e) {
+      // Without this the spinner would hang forever and the player would be
+      // stuck on a blank screen.
+      debugPrint('Level generation failed for seed $seed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
     }
-    _gameController = GameController(
-      meta: level.meta,
-      initialPositions: level.initialPositions,
-      optimalMoves: level.optimalMoves,
-    );
-    _gameController!.addListener(_onGameChange);
+  }
 
-    setState(() {
-      _loading = false;
-    });
+  Widget _buildLoadError(BuildContext context) {
+    final s = S.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded,
+                size: 48, color: Palette.textLow),
+            const SizedBox(height: 16),
+            Text(
+              s.isTr
+                  ? 'Bolum yuklenemedi.'
+                  : 'This level could not be loaded.',
+              textAlign: TextAlign.center,
+              style: ThemeConfig.titleStyle,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ChunkyButton(
+                  color: Palette.buttonWhiteBg,
+                  shadowColor: Palette.buttonWhiteShadow,
+                  borderRadius: 18,
+                  width: 120,
+                  height: 46,
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(s.toLevels, style: ThemeConfig.buttonTextStyle),
+                ),
+                const SizedBox(width: 12),
+                ChunkyButton(
+                  color: Palette.primary,
+                  shadowColor: Palette.primaryDark,
+                  borderRadius: 18,
+                  width: 120,
+                  height: 46,
+                  onPressed: _loadLevel,
+                  child: Text(
+                    s.retry,
+                    style: ThemeConfig.buttonTextStyle
+                        .copyWith(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _onGameChange() {
@@ -381,8 +454,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
         child: SafeArea(
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: Palette.targetEnd))
-              : Stack(
+              ? const Center(
+                  child: CircularProgressIndicator(color: Palette.targetEnd))
+              : _loadFailed
+                  ? _buildLoadError(context)
+                  : Stack(
                   children: [
                     Center(
                       child: ConstrainedBox(
@@ -398,7 +474,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               : (_gameController?.moveCount ?? 0),
                           optimalMoves: activeMode == GameMode.levels ? _gameController?.optimalMoves : null,
                           onBack: () => Navigator.of(context).pop(),
-                          onTitleLongPress: _toggleAutoSolve,
+                          onTitleLongPress:
+                              kCaptureMode ? _toggleAutoSolve : null,
                         ),
 
                         // 2. Sprint Timer Bar
