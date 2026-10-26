@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:deadlock/domain/game_mode.dart';
+import 'package:redbound/domain/game_mode.dart';
 
 void main() {
   test('Game mode properties v3', () {

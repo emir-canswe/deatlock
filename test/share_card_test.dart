@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:deadlock/domain/share_card.dart';
+import 'package:redbound/domain/share_card.dart';
 
 void main() {
   test('Share card generates correctly for optimal solution', () {

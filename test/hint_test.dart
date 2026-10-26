@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:deadlock/domain/board_meta.dart';
-import 'package:deadlock/domain/board_state.dart';
-import 'package:deadlock/domain/hint.dart';
+import 'package:redbound/domain/board_meta.dart';
+import 'package:redbound/domain/board_state.dart';
+import 'package:redbound/domain/hint.dart';
 
 void main() {
   test('Next best move v3', () {

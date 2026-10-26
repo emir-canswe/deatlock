@@ -1,5 +1,5 @@
-name: deadlock
-description: A sliding-block puzzle game.
+name: redbound
+description: Redbound, a sliding-block puzzle game.
 publish_to: 'none'
 version: 1.0.0+1
 
