@@ -1222,7 +1222,7 @@ class _BrandMark extends StatelessWidget {
                 end: Alignment.bottomRight,
               ).createShader(bounds),
               child: Text(
-                'REDBOUND',
+                'FATABLOCK',
                 style: ThemeConfig.headingStyle.copyWith(
                   fontSize: 40,
                   fontWeight: FontWeight.w900,

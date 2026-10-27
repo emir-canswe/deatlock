@@ -1,11 +1,11 @@
 {
-    "name": "Redbound",
-    "short_name": "Redbound",
+    "name": "FataBlock",
+    "short_name": "FataBlock",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E6F1FB",
     "theme_color": "#E6F1FB",
-    "description": "Redbound sliding-block puzzle game.",
+    "description": "FataBlock sliding-block puzzle game.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

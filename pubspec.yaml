@@ -1,5 +1,5 @@
-name: redbound
-description: Redbound, a sliding-block puzzle game.
+name: fatablock
+description: FataBlock, a sliding-block puzzle game.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  google_mobile_ads: ^9.2.0
   shared_preferences: ^2.5.0
 
 dev_dependencies:

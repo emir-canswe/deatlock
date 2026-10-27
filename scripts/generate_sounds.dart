@@ -1,42 +1,73 @@
-// Synthesizes polished, 16-bit 44.1kHz mono PCM WAV sound effects:
-// 1. click.wav : soft, warm marimba-style UI tick (gentle, non-fatiguing)
-// 2. slide.wav : smooth airy woosh with a soft wooden landing "tok"
-// 3. win.wav   : cheerful music-box arpeggio + major chord with a lush reverb tail
+// Soft, calming sound effects for FataBlock.
 //
-// Design notes for a pleasant result:
-//  - raised-cosine attacks + short edge fades remove digital clicks at start/end
-//  - mostly sine-based partials with tasteful, fast-decaying overtones (no harshness)
-//  - a simple Schroeder reverb (comb + allpass) gives the win a rich, musical tail
+// Design rules (the previous set was harsh):
+//  - Gentle onsets: 5-10 ms raised-cosine attacks instead of ~1.5 ms spikes.
+//  - Warm timbre: pure sine tones with at most one faint octave, run through a
+//    low-pass so nothing bright survives. No sparkle above ~3 kHz.
+//  - Low levels: peaks sit between -16 and -10 dBFS, not at -0.7 dBFS.
+//  - One key: every pitched cue is C major, so the stars (C-E-G) sit on top of
+//    the win chord instead of clashing with it.
+//  - Percussive cues (click, slide, snap, bump) are round "taps" in four
+//    clearly different registers. None goes below ~150 Hz: a phone speaker
+//    barely reproduces that, so a deeper tap would simply vanish. Body comes
+//    from a faint second harmonic instead.
 //
-// Run with: dart run scripts/generate_sounds.dart
+// Usage:  dart run scripts/generate_sounds.dart [outputDir]
+//         (default output directory: assets/sounds)
 
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-void main() {
-  final outputDir = Directory('assets/sounds');
-  if (!outputDir.existsSync()) {
-    outputDir.createSync(recursive: true);
-  }
+const int sr = 44100;
 
-  print('Synthesizing polished 16-bit 44.1kHz audio assets...');
-  generateClick(File('assets/sounds/click.wav'));
-  generateSlide(File('assets/sounds/slide.wav'));
-  generateWin(File('assets/sounds/win.wav'));
-  print('Done — assets/sounds/{click,slide,win}.wav regenerated.');
+void main(List<String> args) {
+  final outDir = args.isNotEmpty ? args.first : 'assets/sounds';
+  Directory(outDir).createSync(recursive: true);
+  File f(String name) => File('$outDir/$name.wav');
+
+  writeWav(f('click'), click(), peakDb: -12);
+  writeWav(f('slide'), slide(), peakDb: -16);
+  writeWav(f('snap'), snap(), peakDb: -12);
+  writeWav(f('bump'), bump(), peakDb: -12);
+  writeWav(f('hint'), hint(), peakDb: -13);
+  writeWav(f('undo'), undo(), peakDb: -15);
+  writeWav(f('star1'), star(1), peakDb: -12);
+  writeWav(f('star2'), star(2), peakDb: -12);
+  writeWav(f('star3'), star(3), peakDb: -11);
+  writeWav(f('win'), win(), peakDb: -10);
+
+  // ignore: avoid_print
+  print('Soft sounds written to $outDir');
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── DSP helpers ──────────────────────────────────────────────────────────────
 
-/// Raised-cosine attack (click-free) multiplied by exponential decay.
+/// Raised-cosine attack (no click) times an exponential decay.
 double env(double t, double attack, double decay) {
-  final a = t < attack ? 0.5 - 0.5 * math.cos(math.pi * (t / attack)) : 1.0;
+  final a = t < attack ? 0.5 - 0.5 * math.cos(math.pi * t / attack) : 1.0;
   return a * math.exp(-t / decay);
 }
 
-/// Fades the first/last few milliseconds to guarantee no edge pops.
-void applyEdgeFades(List<double> s, int sr, {double inMs = 1, double outMs = 8}) {
+List<double> blank(double seconds) =>
+    List<double>.filled((sr * seconds).round(), 0.0);
+
+/// Two cascaded one-pole low-pass filters (-12 dB/oct). Removes the bright
+/// edge that makes small phone speakers sound harsh.
+List<double> lowpass(List<double> x, double cutoffHz) {
+  final a = 1 - math.exp(-2 * math.pi * cutoffHz / sr);
+  final y = List<double>.filled(x.length, 0.0);
+  double s1 = 0, s2 = 0;
+  for (int i = 0; i < x.length; i++) {
+    s1 += a * (x[i] - s1);
+    s2 += a * (s1 - s2);
+    y[i] = s2;
+  }
+  return y;
+}
+
+/// Fades the very start and end so there can never be an edge pop.
+void fades(List<double> s, {double inMs = 1, double outMs = 20}) {
   final inN = (sr * inMs / 1000).round();
   final outN = (sr * outMs / 1000).round();
   for (int i = 0; i < inN && i < s.length; i++) {
@@ -47,30 +78,48 @@ void applyEdgeFades(List<double> s, int sr, {double inMs = 1, double outMs = 8})
   }
 }
 
-/// Lush, musical reverb tail (parallel feedback combs + one allpass smear).
-List<double> applyReverb(List<double> dry, int sr, {double wet = 0.26}) {
-  final len = dry.length;
-  final combDelays = <int>[1557, 1617, 1491, 1422];
-  final combFb = <double>[0.80, 0.78, 0.82, 0.76];
+/// Sine whose pitch glides exponentially from [f0] to [f1] (time constant
+/// [tau]), with a faint second harmonic [h2] for body.
+List<double> glide(double seconds, double f0, double f1, double tau, double h2) {
+  final out = blank(seconds);
+  double ph = 0;
+  for (int i = 0; i < out.length; i++) {
+    final t = i / sr;
+    final f = f1 + (f0 - f1) * math.exp(-t / tau);
+    ph += 2 * math.pi * f / sr;
+    out[i] = math.sin(ph) + h2 * math.sin(2 * ph);
+  }
+  return out;
+}
 
-  final wetBuf = List<double>.filled(len, 0.0);
-  for (int c = 0; c < combDelays.length; c++) {
-    final d = combDelays[c];
-    final fb = combFb[c];
+/// Soft bell / marimba-like voice: fundamental plus a faint decaying octave.
+/// Deliberately no inharmonic partials, which are what sound "metallic".
+double bell(double f, double t, double decay, {double attack = 0.010}) {
+  if (t < 0) return 0.0;
+  final e = env(t, attack, decay);
+  final body = math.sin(2 * math.pi * f * t) +
+      0.10 * math.sin(2 * math.pi * f * 2 * t) * math.exp(-t / (decay * 0.5));
+  return body * e;
+}
+
+/// Small, warm room: parallel combs + an all-pass smear.
+List<double> reverb(List<double> dry, double wet) {
+  final len = dry.length;
+  const delays = <int>[1557, 1617, 1491, 1422];
+  const fb = <double>[0.78, 0.76, 0.80, 0.74];
+  final sum = List<double>.filled(len, 0.0);
+  for (int c = 0; c < delays.length; c++) {
     final buf = List<double>.filled(len, 0.0);
     for (int i = 0; i < len; i++) {
-      final delayed = i >= d ? buf[i - d] : 0.0;
-      buf[i] = dry[i] + fb * delayed;
-      wetBuf[i] += buf[i];
+      final d = i >= delays[c] ? buf[i - delays[c]] : 0.0;
+      buf[i] = dry[i] + fb[c] * d;
+      sum[i] += buf[i];
     }
   }
-
   final mixed = List<double>.filled(len, 0.0);
   for (int i = 0; i < len; i++) {
-    mixed[i] = dry[i] + (wetBuf[i] / combDelays.length) * wet;
+    mixed[i] = dry[i] + (sum[i] / delays.length) * wet;
   }
-
-  // Allpass diffusion for a smoother, less metallic tail.
   const apD = 441;
   const apG = 0.6;
   final out = List<double>.filled(len, 0.0);
@@ -82,166 +131,154 @@ List<double> applyReverb(List<double> dry, int sr, {double wet = 0.26}) {
   return out;
 }
 
-// ── Click: soft warm marimba tick ───────────────────────────────────────────
-void generateClick(File file) {
-  const sampleRate = 44100;
-  const duration = 0.06;
-  final n = (sampleRate * duration).toInt();
-  final s = List<double>.filled(n, 0.0);
-  final rand = math.Random(7);
+// ── Percussive taps (four distinct, low registers) ──────────────────────────
 
-  const freq = 680.0; // ~E5, warm and friendly
-  for (int i = 0; i < n; i++) {
-    final t = i / sampleRate;
-    final tone = math.sin(2 * math.pi * freq * t) +
-        0.30 * math.sin(2 * math.pi * freq * 2.0 * t) * math.exp(-t / 0.012) +
-        0.10 * math.sin(2 * math.pi * freq * 3.01 * t) * math.exp(-t / 0.007);
-    // A whisper of texture for a tactile edge (very low, fast-gone).
-    final texture = (rand.nextDouble() * 2 - 1) * math.exp(-t / 0.0012) * 0.08;
-    s[i] = (0.82 * tone + texture) * env(t, 0.003, 0.026);
+/// UI tap: a soft wooden "tok".
+List<double> click() {
+  final x = glide(0.09, 420, 340, 0.018, 0.12);
+  for (int i = 0; i < x.length; i++) {
+    x[i] *= env(i / sr, 0.005, 0.024);
   }
-
-  applyEdgeFades(s, sampleRate, inMs: 1, outMs: 6);
-  writeWav16(file, s, sampleRate);
+  final y = lowpass(x, 1800);
+  fades(y, outMs: 12);
+  return y;
 }
 
-// ── Slide: soft felt tick ───────────────────────────────────────────────────
-// Very short and unobtrusive: a damped air transient plus a quick muted tone.
-// Deliberately percussive and neutral rather than pitched — a melodic "bloop"
-// becomes tiring once it fires on every single move.
-void generateSlide(File file) {
-  const sampleRate = 44100;
-  // The audible part decays within ~40ms; the buffer is padded with silence so
-  // Android's MediaPlayer reliably renders such a short effect.
-  const duration = 0.11;
-  final n = (sampleRate * duration).toInt();
-  final s = List<double>.filled(n, 0.0);
-  final rand = math.Random(5);
-  double lp = 0.0;
-
-  for (int i = 0; i < n; i++) {
-    final t = i / sampleRate;
-
-    // Damped air transient gives the tactile "touch" of the piece moving.
-    lp += ((rand.nextDouble() * 2 - 1) - lp) * 0.25;
-    final air = lp * math.exp(-t / 0.0035) * 0.55;
-
-    // A short muted tone so it still reads as a physical object, not noise.
-    final tone = math.sin(2 * math.pi * 760.0 * t) * math.exp(-t / 0.012) * 0.6;
-
-    s[i] = (air + tone) * env(t, 0.001, 0.016);
+/// Block slide: the lightest, highest tap. It fires on every cell of a drag,
+/// so it is also the quietest cue. Padded with silence so Android's player
+/// renders such a short clip reliably.
+List<double> slide() {
+  final x = glide(0.11, 580, 480, 0.030, 0.10);
+  for (int i = 0; i < x.length; i++) {
+    x[i] *= env(i / sr, 0.006, 0.024);
   }
-
-  applyEdgeFades(s, sampleRate, inMs: 1, outMs: 5);
-  writeWav16(file, s, sampleRate);
+  final y = lowpass(x, 1600);
+  fades(y, outMs: 14);
+  return y;
 }
 
-// ── Win: cheerful music-box arpeggio + chord with reverb ────────────────────
-void generateWin(File file) {
-  const sampleRate = 44100;
-  const duration = 1.8;
-  final n = (sampleRate * duration).toInt();
-  final dry = List<double>.filled(n, 0.0);
-
-  // Bright, friendly music-box voice (sine + quick overtone + light inharmonic).
-  double voice(double freq, double tn, double decay) {
-    if (tn < 0) return 0.0;
-    final a = tn < 0.002 ? tn / 0.002 : 1.0;
-    final f0 = math.sin(2 * math.pi * freq * tn) * math.exp(-tn / decay);
-    final o1 = 0.25 *
-        math.sin(2 * math.pi * freq * 2.0 * tn) *
-        math.exp(-tn / (decay * 0.6));
-    final o2 = 0.10 *
-        math.sin(2 * math.pi * freq * 4.2 * tn) *
-        math.exp(-tn / (decay * 0.35));
-    return (f0 + o1 + o2) * a;
+/// Block settles into its slot: a round "thup".
+List<double> snap() {
+  final x = glide(0.14, 310, 235, 0.020, 0.30);
+  for (int i = 0; i < x.length; i++) {
+    x[i] *= env(i / sr, 0.005, 0.055);
   }
+  final y = lowpass(x, 1500);
+  fades(y, outMs: 16);
+  return y;
+}
 
-  // Ascending C-major arpeggio → it just sounds "happy".
-  const arpFreqs = <double>[523.25, 659.25, 783.99, 1046.50, 1318.51];
-  const arpTimes = <double>[0.00, 0.075, 0.150, 0.225, 0.300];
-  // Final sustained chord (C major, rings out).
-  const chordFreqs = <double>[523.25, 659.25, 783.99, 1046.50];
-  const chordTime = 0.40;
-  // High sparkle on the chord hit.
-  const sparkleFreqs = <double>[2093.00, 2637.02];
+/// Blocked move: a muted "dum". A gentle "not that one", never a buzz.
+List<double> bump() {
+  final x = glide(0.20, 205, 155, 0.045, 0.50);
+  for (int i = 0; i < x.length; i++) {
+    x[i] *= env(i / sr, 0.008, 0.085);
+  }
+  final y = lowpass(x, 1000);
+  fades(y, outMs: 20);
+  return y;
+}
 
-  for (int i = 0; i < n; i++) {
-    final t = i / sampleRate;
-    double mix = 0.0;
+// ── Gentle musical cues (all C major) ───────────────────────────────────────
 
-    for (int k = 0; k < arpFreqs.length; k++) {
-      mix += voice(arpFreqs[k], t - arpTimes[k], 0.55) * 0.22;
+/// Hint: two soft bell notes, G5 then C6 — a calm "ting-ting", nothing sparkly.
+List<double> hint() {
+  final x = blank(1.0);
+  for (int i = 0; i < x.length; i++) {
+    final t = i / sr;
+    x[i] = bell(783.99, t, 0.30) + 0.85 * bell(1046.50, t - 0.13, 0.32);
+  }
+  final y = reverb(lowpass(x, 3000), 0.22);
+  fades(y, outMs: 80);
+  return y;
+}
+
+/// Undo: a soft falling pair, G5 -> E5. Falling pitch reads as "going back".
+List<double> undo() {
+  final x = blank(0.4);
+  for (int i = 0; i < x.length; i++) {
+    final t = i / sr;
+    x[i] = bell(783.99, t, 0.12, attack: 0.008) +
+        0.9 * bell(659.25, t - 0.09, 0.14, attack: 0.008);
+  }
+  final y = lowpass(x, 2500);
+  fades(y, outMs: 40);
+  return y;
+}
+
+/// Star k lights up: C5, E5, G5 — together they are the C major arpeggio the
+/// win chord is built on.
+List<double> star(int k) {
+  final f = <double>[523.25, 659.25, 783.99][k - 1];
+  final x = blank(k == 3 ? 1.0 : 0.7);
+  final decay = k == 3 ? 0.50 : 0.34;
+  for (int i = 0; i < x.length; i++) {
+    final t = i / sr;
+    x[i] = bell(f, t, decay);
+    if (k == 3) x[i] += 0.22 * bell(1046.50, t - 0.04, 0.45);
+  }
+  final y = reverb(lowpass(x, 3000), 0.18);
+  fades(y, outMs: 60);
+  return y;
+}
+
+/// Win: a warm C major chord that swells in slowly, with two quiet bells
+/// floating on top. The stars supply the melody over it.
+List<double> win() {
+  final x = blank(2.4);
+  const chord = <double>[261.63, 329.63, 392.00, 523.25];
+  for (int i = 0; i < x.length; i++) {
+    final t = i / sr;
+    double pad = 0.0;
+    for (final f in chord) {
+      pad += 0.25 * math.sin(2 * math.pi * f * t) +
+          0.045 * math.sin(2 * math.pi * f * 2 * t) * math.exp(-t / 0.6) +
+          0.12 * math.sin(2 * math.pi * (f + 0.6) * t); // slight detune: warmth
     }
-    if (t >= chordTime) {
-      final tc = t - chordTime;
-      for (final f in chordFreqs) {
-        mix += voice(f, tc, 1.1) * 0.20;
-      }
-      for (final f in sparkleFreqs) {
-        mix += voice(f, tc, 0.5) * 0.06;
-      }
-      // Warm sustaining pad for body underneath the chimes.
-      final padEnv = math.sin(math.min(math.pi / 2, tc / 0.25)) * math.exp(-tc / 0.9);
-      final pad = (math.sin(2 * math.pi * 130.81 * tc) * 0.4 +
-              math.sin(2 * math.pi * 196.00 * tc) * 0.32 +
-              math.sin(2 * math.pi * 261.63 * tc) * 0.28) *
-          padEnv *
-          0.16;
-      mix += pad;
-    }
-
-    dry[i] = mix;
+    x[i] = pad * env(t, 0.14, 1.15) +
+        0.30 * bell(783.99, t - 0.35, 0.55) +
+        0.22 * bell(1046.50, t - 0.52, 0.60);
   }
-
-  final wetSamples = applyReverb(dry, sampleRate, wet: 0.26);
-  applyEdgeFades(wetSamples, sampleRate, inMs: 1, outMs: 40);
-  writeWav16(file, wetSamples, sampleRate);
+  final y = reverb(lowpass(x, 2600), 0.28);
+  fades(y, outMs: 350);
+  return y;
 }
 
-// ── WAV writer (16-bit signed PCM, mono, peak-normalized) ───────────────────
-void writeWav16(File file, List<double> floatSamples, int sampleRate) {
+// ── WAV writer (16-bit mono PCM), normalised to a chosen peak ───────────────
+
+void writeWav(File file, List<double> samples, {required double peakDb}) {
   double maxAmp = 0.0;
-  for (final s in floatSamples) {
-    final abs = s.abs();
-    if (abs > maxAmp) maxAmp = abs;
+  for (final s in samples) {
+    final a = s.abs();
+    if (a > maxAmp) maxAmp = a;
   }
-  final gain = maxAmp > 0.0 ? (0.92 / maxAmp) : 1.0;
+  final target = math.pow(10.0, peakDb / 20.0).toDouble();
+  final gain = maxAmp > 0 ? target / maxAmp : 1.0;
 
-  final numSamples = floatSamples.length;
-  final byteData = ByteData(44 + numSamples * 2);
-
-  byteData.setUint8(0, 0x52);
-  byteData.setUint8(1, 0x49);
-  byteData.setUint8(2, 0x46);
-  byteData.setUint8(3, 0x46);
-  byteData.setUint32(4, 36 + numSamples * 2, Endian.little);
-  byteData.setUint8(8, 0x57);
-  byteData.setUint8(9, 0x41);
-  byteData.setUint8(10, 0x56);
-  byteData.setUint8(11, 0x45);
-  byteData.setUint8(12, 0x66);
-  byteData.setUint8(13, 0x6D);
-  byteData.setUint8(14, 0x74);
-  byteData.setUint8(15, 0x20);
-  byteData.setUint32(16, 16, Endian.little);
-  byteData.setUint16(20, 1, Endian.little);
-  byteData.setUint16(22, 1, Endian.little);
-  byteData.setUint32(24, sampleRate, Endian.little);
-  byteData.setUint32(28, sampleRate * 2, Endian.little);
-  byteData.setUint16(32, 2, Endian.little);
-  byteData.setUint16(34, 16, Endian.little);
-  byteData.setUint8(36, 0x64);
-  byteData.setUint8(37, 0x61);
-  byteData.setUint8(38, 0x74);
-  byteData.setUint8(39, 0x61);
-  byteData.setUint32(40, numSamples * 2, Endian.little);
-
-  for (int i = 0; i < numSamples; i++) {
-    final normalized = (floatSamples[i] * gain).clamp(-1.0, 1.0);
-    final pcm16 = (normalized * 32767.0).round().clamp(-32768, 32767);
-    byteData.setInt16(44 + i * 2, pcm16, Endian.little);
+  final n = samples.length;
+  final b = ByteData(44 + n * 2);
+  void tag(int off, String s) {
+    for (int i = 0; i < s.length; i++) {
+      b.setUint8(off + i, s.codeUnitAt(i));
+    }
   }
 
-  file.writeAsBytesSync(byteData.buffer.asUint8List());
+  tag(0, 'RIFF');
+  b.setUint32(4, 36 + n * 2, Endian.little);
+  tag(8, 'WAVE');
+  tag(12, 'fmt ');
+  b.setUint32(16, 16, Endian.little);
+  b.setUint16(20, 1, Endian.little); // PCM
+  b.setUint16(22, 1, Endian.little); // mono
+  b.setUint32(24, sr, Endian.little);
+  b.setUint32(28, sr * 2, Endian.little);
+  b.setUint16(32, 2, Endian.little);
+  b.setUint16(34, 16, Endian.little);
+  tag(36, 'data');
+  b.setUint32(40, n * 2, Endian.little);
+  for (int i = 0; i < n; i++) {
+    final v = (samples[i] * gain).clamp(-1.0, 1.0);
+    b.setInt16(44 + i * 2, (v * 32767.0).round(), Endian.little);
+  }
+  file.writeAsBytesSync(b.buffer.asUint8List());
 }

@@ -1,6 +1,6 @@
-# 🧱 Redbound — Sliding-Block Puzzle Game
+# 🧱 FataBlock — Sliding-Block Puzzle Game
 
-Redbound is a sliding-block puzzle game built with Flutter: free the red block from a 6x6 jam by sliding the other blocks out of its way. Inspired by classic block slide mechanics, it features a custom Xorshift32 PRNG-driven deterministic board generator, dynamic solver algorithms, and lofi arcade-style custom synthesized sound effects and vibration feedback.
+FataBlock is a sliding-block puzzle game built with Flutter: free the red block from a 6x6 jam by sliding the other blocks out of its way. Inspired by classic block slide mechanics, it features a custom Xorshift32 PRNG-driven deterministic board generator, dynamic solver algorithms, and lofi arcade-style custom synthesized sound effects and vibration feedback.
 
 ---
 
@@ -79,7 +79,7 @@ Play will reject a debug-signed upload. To sign properly:
 1. Generate a keystore once and keep the `.jks` file safe and backed up —
    losing it means the app can never be updated again:
    ```bash
-   keytool -genkey -v -keystore redbound-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias redbound
+   keytool -genkey -v -keystore fatablock-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias fatablock
    ```
 2. Copy `android/key.properties.example` to `android/key.properties` and fill
    it in. That file is git-ignored and must never be committed.

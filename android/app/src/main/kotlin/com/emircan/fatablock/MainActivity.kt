@@ -1,4 +1,4 @@
-package com.emircan.redbound
+package com.emircan.fatablock
 
 import io.flutter.embedding.android.FlutterActivity
 

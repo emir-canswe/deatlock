@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:redbound/domain/generator.dart';
-import 'package:redbound/domain/solver.dart';
+import 'package:fatablock/domain/generator.dart';
+import 'package:fatablock/domain/solver.dart';
 
 void main() {
   test('Generate levels 1-5 deterministically v3', () {

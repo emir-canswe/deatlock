@@ -1,4 +1,4 @@
-# Redbound - Yıldız Kapısı (Star Gate) ve İnteraktif Rehber (Tutorial)
+# FataBlock - Yıldız Kapısı (Star Gate) ve İnteraktif Rehber (Tutorial)
 
 Her 50 seviyede bir devreye giren **Yıldız Kapısı (Star Gate)** kilit sistemi ile ilk 3 seviye için hazırlanan **İnteraktif Rehber (Tutorial Overlay)** sistemi başarıyla entegre edildi.
 

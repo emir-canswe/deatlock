@@ -17,7 +17,7 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace = "com.emircan.redbound"
+    namespace = "com.emircan.fatablock"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -27,11 +27,16 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.emircan.redbound"
+        applicationId = "com.emircan.fatablock"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Real AdMob app id comes from key.properties; otherwise Google's test id.
+        manifestPlaceholders["admobAppId"] =
+            (keystoreProperties["admobAppId"] as String?)
+                ?: "ca-app-pub-3940256099942544~3347511713"
     }
 
     signingConfigs {

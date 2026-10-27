@@ -1,6 +1,6 @@
-# Redbound — Dağıtım ve Yayınlama Kılavuzu (Deployment Guide)
+# FataBlock — Dağıtım ve Yayınlama Kılavuzu (Deployment Guide)
 
-Bu kılavuz, Redbound oyununun Web PWA (birincil) ve Android APK (ikincil) platformları için release sürümünün nasıl derlenip yayınlanacağını anlatmaktadır.
+Bu kılavuz, FataBlock oyununun Web PWA (birincil) ve Android APK (ikincil) platformları için release sürümünün nasıl derlenip yayınlanacağını anlatmaktadır.
 
 ---
 
@@ -59,3 +59,40 @@ APK dosyasını telefona kurarken Android güvenlik sistemi uyarı verebilir. Ku
 
 - **Gün Dönümü (Daily Mode)**: Günlük bulmacanın seed'i yerel tarih saatine göre (`DateTime.now()`) hesaplanır. Yeni gün yerel saatle gece `00:00`'da devreye girer. Kullanıcının saat dilimi ne ise, günün değişimi de o saat dilimine göre gerçekleşir.
 - **Uçak Modu (Offline)**: Service Worker, ilk ziyarette tüm oyun kaynaklarını (Nunito fontu dahil) tarayıcı önbelleğine alır. Sonraki tüm açılışlar uçak modunda dahi **1 saniyenin altında** gerçekleşir.
+
+---
+
+## 3. Google Play + Reklam (AdMob) Yayın Kontrol Listesi
+
+### A. Bir kez yapılacaklar
+1. **AdMob hesabı** aç, uygulamayı ekle (Android, paket `com.emircan.fatablock`).
+   - *App ID* (`ca-app-pub-…~…`) → `android/key.properties` içine `admobAppId=` olarak yaz.
+   - İki reklam birimi oluştur: **Interstitial** ve **Rewarded**.
+   - Birim kimliklerini `ads.example.json` dosyasını `ads.json` olarak kopyalayıp doldur
+     (git'e girmez).
+2. **Keystore** üret ve `android/key.properties` doldur (README → Release signing).
+   Keystore'u kaybedersen uygulamayı bir daha güncelleyemezsin; yedekle.
+3. `docs/privacy-policy.md` içindeki `<…>` alanlarını doldur, herkese açık bir
+   adreste yayınla (örn. GitHub Pages) ve Play Console'a gir.
+4. AdMob → *Privacy & messaging* bölümünde **GDPR** mesajı oluştur (AEA/UK onay formu).
+   Bunu yapmazsan o bölgelerde reklam gelmez. Ayrıca `app-ads.txt` istersen web sitene ekle.
+
+### B. Derleme
+```bash
+flutter build appbundle --release --dart-define-from-file=ads.json
+```
+Çıktı: `build/app/outputs/bundle/release/app-release.aab` → Play Console'a yükle.
+Her yeni yüklemede `pubspec.yaml` içindeki `version: 1.0.0+N` değerinde **N'yi artır**.
+
+> Dikkat: `ads.json` veya `admobAppId` olmadan alınan derleme Google'ın TEST
+> reklamlarını gösterir ve gelir getirmez. Yayın öncesi gerçek kimliklerle
+> derlediğini kontrol et. Geliştirirken kendi reklamına tıklama; hesabın kapanabilir
+> (test cihazı ekle veya test kimlikleriyle çalış).
+
+### C. Play Console formları
+- **Ads:** "Yes, my app contains ads".
+- **Data safety:** *Device or other IDs* (Advertising ID) → toplanır, reklam amaçlı,
+  Google AdMob ile paylaşılır. Başka veri toplanmıyor.
+- **Target audience:** 13+ / genel kitle seç (çocuklara yönelik seçersen reklam kuralları sertleşir).
+- **Content rating** anketini doldur; **Advertising ID** beyanını "Yes" yap.
+- Yeni kişisel geliştirici hesaplarında üretime çıkmadan önce **kapalı test** (en az 12 test kullanıcısı, 14 gün) gerekir.

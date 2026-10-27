@@ -7,7 +7,7 @@ String generateShareCard({
   bool isEnglish = false,
 }) {
   final buffer = StringBuffer();
-  buffer.writeln('Redbound #$dailyNumber');
+  buffer.writeln('FataBlock #$dailyNumber');
   
   if (isEnglish) {
     buffer.writeln('$moves moves (optimal $optimal)');

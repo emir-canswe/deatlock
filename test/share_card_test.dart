@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:redbound/domain/share_card.dart';
+import 'package:fatablock/domain/share_card.dart';
 
 void main() {
   test('Share card generates correctly for optimal solution', () {
@@ -9,7 +9,7 @@ void main() {
       optimal: 9,
       gameUrl: 'https://emir-canswe.github.io/deadlock/',
     );
-    expect(shareStr.contains('Redbound #218'), isTrue);
+    expect(shareStr.contains('FataBlock #218'), isTrue);
     expect(shareStr.contains('9 hamle (optimal 9)'), isTrue);
     expect(shareStr.contains('🟩🟩🟩🟩🟩🟩🟩🟩🟩'), isTrue);
     expect(shareStr.contains('Optimal ✓'), isTrue);
@@ -23,7 +23,7 @@ void main() {
       optimal: 9,
       gameUrl: 'https://emir-canswe.github.io/deadlock/',
     );
-    expect(shareStr.contains('Redbound #218'), isTrue);
+    expect(shareStr.contains('FataBlock #218'), isTrue);
     expect(shareStr.contains('11 hamle (optimal 9)'), isTrue);
     expect(shareStr.contains('🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨🟨'), isTrue);
     expect(shareStr.contains('Optimal ✓'), isFalse);

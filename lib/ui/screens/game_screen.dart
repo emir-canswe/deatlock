@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../core/ads.dart';
 import '../../core/audio.dart';
 import '../../core/haptics.dart';
 import '../../core/palette.dart';
@@ -61,6 +62,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   // Board view key for animating auto-play hint moves
   final GlobalKey<BoardViewState> _boardViewKey = GlobalKey<BoardViewState>();
+
+  // Every game starts with this many hints; more cost a rewarded ad.
+  static const int _hintsPerGame = 3;
+  int _hintsLeft = _hintsPerGame;
 
   // Hint state
   int? _hintPieceIndex;
@@ -128,6 +133,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _loading = true;
       _loadFailed = false;
       _showWin = false;
+      _hintsLeft = _hintsPerGame;
       _hintPieceIndex = null;
       _hintMove = null;
       _guideMinimized = false;
@@ -242,6 +248,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _onWin() {
     Haptics.winVibration();
+    if (widget.mode != GameMode.sprint) Ads.registerGameCompleted();
     if (widget.mode == GameMode.sprint) {
       _sprintController?.recordWin();
       _loadLevel();
@@ -268,6 +275,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _triggerZenTransition() {
     if (!mounted) return;
+    Ads.showInterstitialIfDue();
     setState(() => _zenTransitioning = true);
     _zenTransitionController.forward(from: 0.0).then((_) {
       if (!mounted) return;
@@ -353,29 +361,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _showHint() {
     if (_gameController == null || _gameController!.won) return;
 
-    final s = S.of(context);
     final isHintZen = widget.mode == GameMode.zen;
-    final hasHints = widget.progressController.hints > 0 || isHintZen;
-
-    if (!hasHints) {
-      Haptics.lightImpact();
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            s.noHintsLeft,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Palette.textHigh,
-          duration: const Duration(milliseconds: 1400),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-        ),
-      );
-      return;
-    }
 
     // If hint is already visible, don't deduct again — provide soft haptic
     if (_hintPieceIndex != null && _hintMove != null) {
@@ -383,20 +369,75 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return;
     }
 
-    final bestMove = nextBestMove(_gameController!.meta, _gameController!.boardState);
-    if (bestMove != null) {
-      if (!isHintZen) {
-        widget.progressController.useHint();
-      }
-      _gameController!.markHintUsed();
-      Haptics.mediumImpact();
-      Audio.playSlide();
-
-      setState(() {
-        _hintPieceIndex = bestMove.pieceIndex;
-        _hintMove = bestMove;
-      });
+    if (_hintsLeft <= 0 && !isHintZen) {
+      _offerRewardedHint();
+      return;
     }
+
+    _revealHint(spend: true);
+  }
+
+  /// Out of hints: ask the player to watch a rewarded ad for one more.
+  Future<void> _offerRewardedHint() async {
+    final s = S.of(context);
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.watchAdTitle),
+        content: Text(s.watchAdBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.cancelBtn),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.watchAdBtn),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+
+    final earned = await Ads.showRewarded();
+    if (!mounted) return;
+    final gc = _gameController;
+    if (gc == null || gc.won) return;
+
+    if (earned) {
+      _revealHint(spend: false); // The ad paid for this hint.
+    } else {
+      Haptics.lightImpact();
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            s.adUnavailable,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Palette.textHigh,
+          duration: const Duration(milliseconds: 1800),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+        ),
+      );
+    }
+  }
+
+  void _revealHint({required bool spend}) {
+    final bestMove = nextBestMove(_gameController!.meta, _gameController!.boardState);
+    if (bestMove == null) return;
+    if (spend && widget.mode != GameMode.zen) _hintsLeft--;
+    _gameController!.markHintUsed();
+    Haptics.mediumImpact();
+    Audio.playHint();
+
+    setState(() {
+      _hintPieceIndex = bestMove.pieceIndex;
+      _hintMove = bestMove;
+    });
   }
 
   void _applyHint() {
@@ -421,9 +462,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _startUndoRepeat() {
     if (_gameController == null || !_gameController!.canUndo) return;
     _gameController!.undo();
+    Audio.playUndo();
+    Haptics.lightImpact();
     _undoTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
       if (_gameController != null && _gameController!.canUndo) {
         _gameController!.undo();
+        Audio.playUndo();
+        Haptics.lightImpact();
       } else {
         _undoTimer?.cancel();
       }
@@ -588,9 +633,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         if (!_showWin)
                           BottomBar(
                             mode: activeMode,
-                            hintCount: widget.progressController.hints,
+                            hintCount: _hintsLeft,
                             canUndo: _gameController?.canUndo ?? false,
-                            onUndo: () => _gameController?.undo(),
+                            onUndo: () {
+                              // A plain tap used to undo silently; only the
+                              // long-press repeat played the undo sound.
+                              if (_gameController?.canUndo ?? false) {
+                                Audio.playUndo();
+                              }
+                              _gameController?.undo();
+                            },
                             onUndoLongPressStart: _startUndoRepeat,
                             onUndoLongPressEnd: _stopUndoRepeat,
                             onHint: _showHint,
@@ -653,6 +705,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             sprintScore: _sprintController?.score,
                             sprintBest: _sprintController?.personalBest,
                             onRetry: () {
+                              Ads.showInterstitialIfDue();
                               if (activeMode == GameMode.sprint) {
                                 _sprintController?.start();
                                 setState(() {
@@ -662,6 +715,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               _loadLevel();
                             },
                             onNext: () {
+                              Ads.showInterstitialIfDue();
                               if (activeMode == GameMode.levels) {
                                 if (widget.progressController.isGateBlockedForNext(_currentLevelNumber)) {
                                   Navigator.of(context).pop();

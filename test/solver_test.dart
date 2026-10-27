@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:redbound/domain/board_meta.dart';
-import 'package:redbound/domain/board_state.dart';
-import 'package:redbound/domain/solver.dart';
+import 'package:fatablock/domain/board_meta.dart';
+import 'package:fatablock/domain/board_state.dart';
+import 'package:fatablock/domain/solver.dart';
 
 void main() {
   test('Simple 2-move puzzle v3', () {

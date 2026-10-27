@@ -194,6 +194,12 @@ class S {
   String get hintTitle => isTr ? 'İPUCU' : 'HINT';
   String get hintApply => isTr ? 'HAMLEYİ YAP' : 'PLAY MOVE';
   String get hintClose => isTr ? 'KAPAT' : 'CLOSE';
+  String get watchAdTitle => isTr ? 'Reklam izle, ipucu kazan' : 'Watch an ad for a hint';
+  String get watchAdBody => isTr
+      ? 'Bu oyundaki ipuçların bitti. Kısa bir reklam izleyerek 1 ipucu kazanabilirsin.'
+      : 'You are out of hints for this game. Watch a short ad to get 1 hint.';
+  String get watchAdBtn => isTr ? 'İZLE' : 'WATCH';
+  String get adUnavailable => isTr ? 'Reklam şu an yüklenemedi, biraz sonra tekrar dene' : 'Ad is not available right now, try again shortly';
   String get noHintsLeft => isTr ? 'İpucu kalmadı!' : 'No hints left!';
   String get hintActiveNotice => isTr ? 'İpucu zaten aktif' : 'Hint is already active';
 

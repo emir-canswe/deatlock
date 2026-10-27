@@ -73,7 +73,7 @@ class _DeadlockAppState extends State<DeadlockApp> with WidgetsBindingObserver {
         );
 
         return MaterialApp(
-          title: 'Redbound',
+          title: 'FataBlock',
           debugShowCheckedModeBanner: false,
           theme: ThemeConfig.buildTheme(isDark: isDark),
           locale: appLocale,

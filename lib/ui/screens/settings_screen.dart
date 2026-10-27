@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/ads.dart';
 import '../../core/audio.dart';
 import '../../core/haptics.dart';
 import '../../core/palette.dart';
@@ -285,7 +286,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'REDBOUND',
+                                      'FATABLOCK',
                                       style: TextStyle(
                                         fontFamily: 'Nunito',
                                         fontSize: 14.5,
@@ -334,13 +335,31 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ),
                       ]),
 
+                      if (Ads.privacyOptionsRequired) ...[
+                        const SizedBox(height: 16),
+                        Center(
+                          child: TextButton(
+                            onPressed: Ads.showPrivacyOptions,
+                            child: Text(
+                              s.isTr ? 'Reklam gizlilik tercihleri' : 'Ad privacy choices',
+                              style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: Palette.textLow,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+
                       const SizedBox(height: 32),
 
                       // Footer Studio Branding
                       Column(
                         children: [
                           Text(
-                            'REDBOUND PUZZLE STUDIO',
+                            'FATABLOCK PUZZLE STUDIO',
                             style: TextStyle(
                               fontFamily: 'Nunito',
                               fontSize: 11,

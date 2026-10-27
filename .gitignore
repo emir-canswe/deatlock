@@ -48,3 +48,6 @@ app.*.map.json
 /android/key.properties
 **/*.jks
 **/*.keystore
+
+# Real AdMob ad unit ids (copy from ads.example.json)
+ads.json

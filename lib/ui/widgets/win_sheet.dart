@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../core/audio.dart';
 import '../../core/haptics.dart';
 import '../../core/palette.dart';
 import '../../core/strings.dart';
@@ -76,14 +77,17 @@ class _WinSheetState extends State<WinSheet>
         if (_controller.value >= 0.20 && _hapticPlayedStars < 1 && stars >= 1) {
           _hapticPlayedStars = 1;
           Haptics.lightImpact();
+          Audio.playStar(1);
         }
         if (_controller.value >= 0.42 && _hapticPlayedStars < 2 && stars >= 2) {
           _hapticPlayedStars = 2;
           Haptics.lightImpact();
+          Audio.playStar(2);
         }
         if (_controller.value >= 0.64 && _hapticPlayedStars < 3 && stars >= 3) {
           _hapticPlayedStars = 3;
           Haptics.mediumImpact();
+          Audio.playStar(3);
         }
       }
     });

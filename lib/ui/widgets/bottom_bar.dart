@@ -66,17 +66,13 @@ class _BottomBarState extends State<BottomBar>
     super.dispose();
   }
 
-  void _triggerHintShake() {
-    Haptics.lightImpact();
-    _shakeController.forward(from: 0.0);
-  }
-
   @override
   Widget build(BuildContext context) {
     final showUndo = widget.mode.allowsUndo;
     final showHint = widget.mode.allowsHint;
     final isHintZen = widget.mode == GameMode.zen;
-    final isHintZero = widget.hintCount <= 0 && !isHintZen;
+    // With no hints left the button offers a rewarded ad instead.
+    final isHintAd = widget.hintCount <= 0 && !isHintZen;
     final s = S.of(context);
     final isDark = Palette.isDark;
 
@@ -147,13 +143,7 @@ class _BottomBarState extends State<BottomBar>
                 depth: 4.5,
                 enabled: showHint,
                 glowColor: hintBg.withValues(alpha: isDark ? 0.35 : 0.25),
-                onPressed: () {
-                  if (isHintZero) {
-                    _triggerHintShake();
-                  } else {
-                    widget.onHint();
-                  }
-                },
+                onPressed: widget.onHint,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -194,7 +184,7 @@ class _BottomBarState extends State<BottomBar>
                         ),
                       ),
                       child: Text(
-                        isHintZen ? '∞' : '${widget.hintCount}',
+                        isHintZen ? '∞' : (isHintAd ? 'AD' : '${widget.hintCount}'),
                         style: const TextStyle(
                           fontFamily: 'Nunito',
                           color: Colors.white,

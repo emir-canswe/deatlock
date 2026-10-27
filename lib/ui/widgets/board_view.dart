@@ -147,7 +147,7 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
         if (_snapPieceId != null) {
           final delta = (_snapTo / _cellSize).round();
           if (delta != 0) {
-            Audio.playSlide();
+            Audio.playSnap();
             widget.controller.applyMove(Move(_snapPieceId!, delta));
             if (widget.controller.won) {
               _triggerWinSequence();
@@ -236,6 +236,7 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     // If the piece cannot slide in either direction, do a shake animation
     if (range.$1 == 0 && range.$2 == 0) {
       Haptics.lightImpact();
+      Audio.playBump();
       setState(() {
         _shakePieceId = pieceIndex;
       });
@@ -323,6 +324,7 @@ class BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     // If the piece cannot slide in either direction, do a shake animation
     if (range.$1 == 0 && range.$2 == 0) {
       Haptics.lightImpact();
+      Audio.playBump();
       setState(() {
         _shakePieceId = pieceIndex;
       });
